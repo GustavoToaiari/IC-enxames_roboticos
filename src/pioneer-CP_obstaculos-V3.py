@@ -177,7 +177,7 @@ def main():
     sim = client.getObject('sim')
     client.setStepping(True)
 
-    # --- Robôs e motores ---
+    # Robôs e motores
     robot1 = sim.getObject('/Pioneer_p3dx')
     leftMotor1 = sim.getObject('/Pioneer_p3dx_leftMotor')
     rightMotor1 = sim.getObject('/Pioneer_p3dx_rightMotor')
@@ -195,9 +195,6 @@ def main():
     wp = WorldParams()
     gains = FieldGains()
 
-    print(f"[INFO] Raio do goal GLOBAL (GOAL_RADIUS): {wp.GOAL_RADIUS:.3f} m")
-    print(f"[INFO] Tolerância de chegada no sub-goal (GOAL_TOL): {rp.GOAL_TOL:.3f} m")
-
     # ---- Obstáculos estáticos ----
     obstacle_handles = [
             sim.getObject('/80cmHighPillar25cm0'),
@@ -212,29 +209,23 @@ def main():
         ox, oy, _ = sim.getObjectPosition(h, sim.handle_world)
         obstacles_xy.append((ox, oy))
 
-    # clearance com obstáculos estáticos
+    # Distância de segurança entre o robô e o obstaculo
     r_clear_env = rp.ROBOT_RADIUS + wp.OBSTACLE_RADIUS
-    print(f'[INFO] Clearance geométrico (robô x pilar): r_clear_env = {r_clear_env:.3f} m')
 
-    # clearance entre robôs (discos de raio ROBOT_RADIUS)
+    # Distância de segurança entre os robôs
     r_clear_rr = 2.0 * rp.ROBOT_RADIUS
-    print(f'[INFO] Clearance geométrico (robô x robô): r_clear_rr = {r_clear_rr:.3f} m')
 
     # listas para guardar trajetórias
     traj1 = []
     traj2 = []
 
-    # pegar posição do goal uma vez (ele é estático)
+    # pega a posição do goal uma vez (ele é estático)
     gx, gy, _ = sim.getObjectPosition(goal, sim.handle_world)
 
-    # ----- Definição dos sub-goals (vagas) -----
-    d = 0.70  # distância entre as "vagas" (ajuste se quiser mais separado)
+    # Definição dos sub-goals (vagas)
+    d = 0.70  # distância entre as "vagas" (ajustar para ser mais separado)
     g1x, g1y = gx - d/2.0, gy     # sub-goal do robô 1
     g2x, g2y = gx + d/2.0, gy     # sub-goal do robô 2
-
-    print(f"[INFO] Goal global: ({gx:.3f}, {gy:.3f})")
-    print(f"[INFO] Sub-goal Robô 1: ({g1x:.3f}, {g1y:.3f})")
-    print(f"[INFO] Sub-goal Robô 2: ({g2x:.3f}, {g2y:.3f})")
 
     # flags de chegada
     reached1 = False
@@ -246,12 +237,12 @@ def main():
     while True:
         client.step()
 
-        # --- Pose robô 1 ---
+        # Pose robô 1
         pose1 = sim.getObjectPose(robot1, sim.handle_world)
         r1x, r1y = pose1[0], pose1[1]
         yaw1 = yaw_from_quaternion(pose1[3], pose1[4], pose1[5], pose1[6])
 
-        # --- Pose robô 2 ---
+        # Pose robô 2
         pose2 = sim.getObjectPose(robot2, sim.handle_world)
         r2x, r2y = pose2[0], pose2[1]
         yaw2 = yaw_from_quaternion(pose2[3], pose2[4], pose2[5], pose2[6])
@@ -264,32 +255,32 @@ def main():
         dist_goal1 = math.hypot(g1x - r1x, g1y - r1y)
         dist_goal2 = math.hypot(g2x - r2x, g2y - r2y)
 
-        # checa chegada individual: CADA robô para quando entra no seu sub-goal
+        # checa chegada individual: cada robô para quando entra no seu sub-goal
         if not reached1 and dist_goal1 <= rp.GOAL_TOL:
             reached1 = True
             sim.setJointTargetVelocity(leftMotor1, 0.0)
             sim.setJointTargetVelocity(rightMotor1, 0.0)
-            print('[INFO] Robô 1 chegou ao seu sub-goal.')
+            print('Robô 1 chegou ao seu sub-goal.')
 
         if not reached2 and dist_goal2 <= rp.GOAL_TOL:
             reached2 = True
             sim.setJointTargetVelocity(leftMotor2, 0.0)
             sim.setJointTargetVelocity(rightMotor2, 0.0)
-            print('[INFO] Robô 2 chegou ao seu sub-goal.')
+            print('Robô 2 chegou ao seu sub-goal.')
 
-        # condição de parada: TODOS chegaram em seus sub-goals
+        # condição de parada: todos chegaram em seus sub-goals
         if reached1 and reached2:
-            print('[INFO] Todos os robôs chegaram aos seus sub-goals. Parando simulação.')
+            print('Todos os robôs chegaram aos seus sub-goals. Parando simulação.')
             break
 
-        # ---- Controle robô 1 (se ainda não chegou) ----
+        # Controle robô 1 (se ainda não chegou)
         if not reached1:
             # só considera robô 2 como obstáculo se ele ainda NÃO chegou
             other_pos_for_1 = (r2x, r2y) if not reached2 else None
 
             v1_cmd, w1_cmd, d_surf_min1 = compute_control_for_robot(
                 r1x, r1y, yaw1,
-                g1x, g1y,                # usa sub-goal 1
+                g1x, g1y,   # usa sub-goal 1
                 obstacle_handles,
                 sim,
                 gains,
@@ -314,14 +305,14 @@ def main():
             sim.setJointTargetVelocity(leftMotor1, wl1)
             sim.setJointTargetVelocity(rightMotor1, wr1)
 
-        # ---- Controle robô 2 (se ainda não chegou) ----
+        # Controle robô 2 (se ainda não chegou)
         if not reached2:
             # só considera robô 1 como obstáculo se ele ainda NÃO chegou
             other_pos_for_2 = (r1x, r1y) if not reached1 else None
 
             v2_cmd, w2_cmd, d_surf_min2 = compute_control_for_robot(
                 r2x, r2y, yaw2,
-                g2x, g2y,                # usa sub-goal 2
+                g2x, g2y,   # usa sub-goal 2
                 obstacle_handles,
                 sim,
                 gains,
@@ -347,7 +338,7 @@ def main():
         # Verificar tempo e interromper após 30 segundos
         elapsed_time = time.time() - start_time
         if elapsed_time > 30:
-            print('[INFO] Tempo limite alcançado. Finalizando simulação.')
+            print('Tempo limite alcançado. Finalizando simulação.')
             break
 
     # Encerrar simulação e zerar motores
