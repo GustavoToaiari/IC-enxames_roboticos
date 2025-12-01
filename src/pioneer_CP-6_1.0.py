@@ -11,8 +11,8 @@ class RobotParams:
     AXLE_LENGTH: float = 0.331
     LEFT_SIGN: int = 1
     RIGHT_SIGN: int = 1
-    V_MAX: float = 0.80
-    W_MAX: float = 2.4
+    V_MAX: float = 0.40
+    W_MAX: float = 1.2
     WHEEL_OMEGA_MAX: float = 12.0
     GOAL_TOL: float = 0.10
     ROBOT_RADIUS: float = 0.20
@@ -27,9 +27,9 @@ class WorldParams:
 class FieldGains:
     # Campo potencial
     K_ATT: float = 1.0  # força de atração
-    K_REP: float = 4.5  # força de repulsão
+    K_REP: float = 3.5  # força de repulsão
     RHO_0: float = 1.0  # janela de influência sobre d_surf
-    K_ROT: float = 0.9  # rotacional/tangencial p/ contornar
+    K_ROT: float = 0.7  # rotacional/tangencial p/ contornar
     # Mapeamento vetor -> (v,w)
     K_V: float = 1.0    # mapeamento campo -> v
     K_W: float = 2.2    # mapeamento campo -> w
@@ -181,16 +181,12 @@ def main():
     wp = WorldParams()
     gains = FieldGains()
 
-    # ==============================
-    # 1) Definição dos robôs (N)
-    # ==============================
-    N_ROBOTS = 6  # aqui você escolhe: 3, 4, 6, ...
+    N_ROBOTS = 6    # Quantidade de robôs
 
     robots = []
 
     for i in range(N_ROBOTS):
-        # i = 0 -> '':  /Pioneer_p3dx, /Pioneer_p3dx_leftMotor, ...
-        # i >= 1 -> '2', '3', ...: /Pioneer_p3dx2, /Pioneer_p3dx_leftMotor2, ...
+
         suffix = '' if i == 0 else str(i + 1)
 
         robot_name = '/Pioneer_p3dx' + suffix
@@ -216,9 +212,7 @@ def main():
     if sim.getSimulationState() == sim.simulation_stopped:
         sim.startSimulation()
 
-    # ==============================
-    # 2) Obstáculos estáticos
-    # ==============================
+    # Obstáculos estáticos
     obstacle_handles = [
         sim.getObject('/80cmHighPillar25cm0'),
         sim.getObject('/80cmHighPillar25cm1'),
@@ -226,6 +220,7 @@ def main():
         sim.getObject('/80cmHighPillar25cm3'),
     ]
 
+    # Guarda as posições dos obstáculos
     obstacles_xy = []
     for h in obstacle_handles:
         ox, oy, _ = sim.getObjectPosition(h, sim.handle_world)
@@ -330,25 +325,23 @@ def main():
             sim.setJointTargetVelocity(rob['left_motor'], wl)
             sim.setJointTargetVelocity(rob['right_motor'], wr)
 
-        # 4.5 Tempo limite
+        # Tempo limite de simulação
         elapsed_time = time.time() - start_time
-        if elapsed_time > 60:  # aumentei para 60 s com mais robôs
+        if elapsed_time > 90:
             print('Tempo limite alcançado. Finalizando simulação.')
             break
 
-    # ==============================
-    # 5) Encerrar e plotar trajetórias
-    # ==============================
+    # Encerrar e plotar trajetórias
     for rob in robots:
         sim.setJointTargetVelocity(rob['left_motor'], 0.0)
         sim.setJointTargetVelocity(rob['right_motor'], 0.0)
 
     sim.stopSimulation()
 
-    # Plot
+    # Plotando as trajetórias
     fig, ax = plt.subplots()
 
-    # Obstáculos
+    # Obstáculos físicos
     for (ox, oy) in obstacles_xy:
         circ_obs = plt.Circle((ox, oy),
                               wp.OBSTACLE_RADIUS,
@@ -356,6 +349,7 @@ def main():
                               color='k')
         ax.add_patch(circ_obs)
 
+        # Raio de influência do campo repulsivo
         raio_influencia = r_clear_env + gains.RHO_0
         circ_rep = plt.Circle((ox, oy),
                               raio_influencia,

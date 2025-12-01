@@ -21,7 +21,7 @@ class RobotParams:
 class WorldParams:
     OBSTACLE_RADIUS: float = 0.50   # raio físico do pilar
     OBSTACLE_PREFIX: str = '80cmHighPillar25cm'  # para auto-descobrir os obstaculos
-    GOAL_RADIUS: float = 0.7       # raio do goal GLOBAL (visual / espaço p/ robôs)
+    GOAL_RADIUS: float = 0.7        # raio do goal GLOBAL (visual / espaço p/ robôs)
 
 @dataclass
 class FieldGains:
@@ -206,7 +206,7 @@ def main():
         sim.getObject('/80cmHighPillar25cm3'),
     ]
     
-    # Guarda as posições dos obstáculos (assumindo estáticos)
+    # Guarda as posições dos obstáculos
     obstacles_xy = []
     for h in obstacle_handles:
         ox, oy, _ = sim.getObjectPosition(h, sim.handle_world)
