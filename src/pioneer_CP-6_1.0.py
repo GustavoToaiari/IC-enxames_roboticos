@@ -2,7 +2,7 @@ import math
 import numpy as np
 from dataclasses import dataclass
 from coppeliasim_zmqremoteapi_client import RemoteAPIClient
-import matplotlib.pyplot as plt 
+import matplotlib.pyplot as plt
 import time
 
 @dataclass
@@ -20,8 +20,9 @@ class RobotParams:
 @dataclass
 class WorldParams:
     OBSTACLE_RADIUS: float = 0.50   # raio físico do pilar
-    OBSTACLE_PREFIX: str = '80cmHighPillar25cm'  # para auto-descobrir os obstaculos
-    GOAL_RADIUS: float = 2       # raio do goal GLOBAL (visual / espaço p/ robôs)
+    OBSTACLE_PREFIX: str = '80cmHighPillar25cm'  # para auto-descobrir os obstáculos
+    GOAL_WIDTH: float = 10.0       # largura do goal (retângulo)
+    GOAL_HEIGHT: float = 1.0      # altura do goal (retângulo)
 
 @dataclass
 class FieldGains:
@@ -42,11 +43,11 @@ def saturate(x, a, b):
 
 def world_vec_to_body(vx_w, vy_w, yaw):
     c, s = math.cos(-yaw), math.sin(-yaw)
-    return c*vx_w - s*vy_w, s*vx_w + c*vy_w
+    return c * vx_w - s * vy_w, s * vx_w + c * vy_w
 
 def vw_to_wheel_omegas(v, w, r, L):
-    wr = (2.0*v + w*L) / (2.0*r)
-    wl = (2.0*v - w*L) / (2.0*r)
+    wr = (2.0 * v + w * L) / (2.0 * r)
+    wl = (2.0 * v - w * L) / (2.0 * r)
     return wl, wr
 
 def attractive_field(px, py, gx, gy, K_ATT):
@@ -171,7 +172,6 @@ def compute_control_for_robot(rx, ry, yaw,
 
     return v_cmd, w_cmd, d_surf_min
 
-
 def main():
     client = RemoteAPIClient()
     sim = client.getObject('sim')
@@ -186,9 +186,7 @@ def main():
     robots = []
 
     for i in range(N_ROBOTS):
-
         suffix = '' if i == 0 else str(i + 1)
-
         robot_name = '/Pioneer_p3dx' + suffix
         left_name  = '/Pioneer_p3dx_leftMotor' + suffix
         right_name = '/Pioneer_p3dx_rightMotor' + suffix
@@ -203,8 +201,8 @@ def main():
             'right_motor': right_motor,
             'traj': [],
             'reached': False,
-            'pose': (0.0, 0.0, 0.0),  # (x, y, yaw)
-            'subgoal': (0.0, 0.0)     # será definido depois
+            'pose': (0.0, 0.0, 0.0),
+            'subgoal': (0.0, 0.0)
         })
 
     goal = sim.getObject('/Goal')
@@ -235,16 +233,17 @@ def main():
     # posição do goal
     gx, gy, _ = sim.getObjectPosition(goal, sim.handle_world)
 
-    # raio do círculo onde ficarão as vagas
-    margem = 0.05
-    R_slots = wp.GOAL_RADIUS - rp.ROBOT_RADIUS - margem
+    # Definindo a posição dos sub-goals ao longo do retângulo
+    goal_width = wp.GOAL_WIDTH
+    goal_height = wp.GOAL_HEIGHT
+    spacing_x = goal_width / (N_ROBOTS - 1)
+    spacing_y = 0
+
     for k in range(N_ROBOTS):
-        theta = 2.0 * math.pi * k / N_ROBOTS  # ângulo igualmente espaçado
-        sx = gx + R_slots * math.cos(theta)
-        sy = gy + R_slots * math.sin(theta)
+        sx = gx + (k * spacing_x) - goal_width / 2  # Ajusta para ficar dentro do retângulo
+        sy = gy  # Todos os sub-goals na mesma linha, sem alteração no eixo y
         robots[k]['subgoal'] = (sx, sy)
 
-    # Loop principal
     start_time = time.time()
 
     while True:
@@ -326,7 +325,6 @@ def main():
         if elapsed_time > 120:
             print('Tempo limite alcançado. Finalizando simulação.')
             break
-
     # Encerrar e plotar trajetórias
     for rob in robots:
         sim.setJointTargetVelocity(rob['left_motor'], 0.0)
@@ -366,12 +364,9 @@ def main():
 
     # Goal global
     ax.plot(gx, gy, '*', markersize=14, label='goal (centro)')
-    goal_circle = plt.Circle((gx, gy),
-                             wp.GOAL_RADIUS,
-                             fill=False,
-                             linestyle='-',
-                             alpha=0.8)
-    ax.add_patch(goal_circle)
+    rect_goal = plt.Rectangle((gx - wp.GOAL_WIDTH / 2, gy - wp.GOAL_HEIGHT / 2),
+                              wp.GOAL_WIDTH, wp.GOAL_HEIGHT, fill=False, linestyle='-', alpha=0.8)
+    ax.add_patch(rect_goal)
 
     # Sub-goals
     for k, rob in enumerate(robots):
@@ -380,7 +375,7 @@ def main():
 
     ax.set_xlabel('x [m]')
     ax.set_ylabel('y [m]')
-    ax.set_title(f'Trajetórias de {N_ROBOTS} Pioneers com repulsão mútua e sub-goals em círculo')
+    ax.set_title(f'Trajetórias de {N_ROBOTS} Pioneers com repulsão mútua e sub-goals em retângulo')
     ax.axis('equal')
     ax.grid(True)
     ax.legend()
