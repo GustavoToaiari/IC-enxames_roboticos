@@ -75,7 +75,7 @@ def repulsive_rotational_surface(px, py, ox, oy, gx, gy,    # p = posição do r
     if d_surf >= RHO_0:
         return 0.0, 0.0, d_surf
 
-    # dentro da janela
+    # dentro da janela de influência
     mag_rep = K_REP * (1.0/d_surf - 1.0/RHO_0) * (1.0/(d_surf*d_surf))
     Fx_rep, Fy_rep = mag_rep * ex, mag_rep * ey
 
@@ -226,35 +226,31 @@ def main():
         ox, oy, _ = sim.getObjectPosition(h, sim.handle_world)
         obstacles_xy.append((ox, oy))
 
+    # Distância de segurança entre robô e obstáculo
     r_clear_env = rp.ROBOT_RADIUS + wp.OBSTACLE_RADIUS
+
+    # Distância de segurança entre robôs
     r_clear_rr = 2.0 * rp.ROBOT_RADIUS
 
-    # ==============================
-    # 3) Sub-goals em círculo
-    # ==============================
+    # posição do goal
     gx, gy, _ = sim.getObjectPosition(goal, sim.handle_world)
 
     # raio do círculo onde ficarão as vagas
     margem = 0.05
     R_slots = wp.GOAL_RADIUS - rp.ROBOT_RADIUS - margem
-    if R_slots <= 0:
-        R_slots = wp.GOAL_RADIUS * 0.7  # fallback se o raio ficar estranho
-
     for k in range(N_ROBOTS):
         theta = 2.0 * math.pi * k / N_ROBOTS  # ângulo igualmente espaçado
         sx = gx + R_slots * math.cos(theta)
         sy = gy + R_slots * math.sin(theta)
         robots[k]['subgoal'] = (sx, sy)
 
-    # ==============================
-    # 4) Loop principal
-    # ==============================
+    # Loop principal
     start_time = time.time()
 
     while True:
         client.step()
 
-        # 4.1 Ler pose de todos e registrar trajetória
+        # Ler pose de todos e registrar trajetória
         for rob in robots:
             pose = sim.getObjectPose(rob['handle'], sim.handle_world)
             x, y = pose[0], pose[1]
@@ -262,7 +258,7 @@ def main():
             rob['pose'] = (x, y, yaw)
             rob['traj'].append((x, y))
 
-        # 4.2 Verificar chegada e parar robôs que chegaram
+        # Verificar chegada e parar robôs que chegaram
         for rob in robots:
             if rob['reached']:
                 continue
@@ -276,12 +272,12 @@ def main():
                 sim.setJointTargetVelocity(rob['right_motor'], 0.0)
                 print('Um robô chegou ao seu sub-goal em', sx, sy)
 
-        # 4.3 Se todos chegaram, encerra
+        # Se todos chegaram, encerra
         if all(rob['reached'] for rob in robots):
             print('Todos os robôs chegaram aos seus sub-goals. Parando simulação.')
             break
 
-        # 4.4 Controle de cada robô
+        # Controle de cada robô
         for i, rob in enumerate(robots):
             if rob['reached']:
                 continue
@@ -327,7 +323,7 @@ def main():
 
         # Tempo limite de simulação
         elapsed_time = time.time() - start_time
-        if elapsed_time > 90:
+        if elapsed_time > 120:
             print('Tempo limite alcançado. Finalizando simulação.')
             break
 
