@@ -60,7 +60,7 @@ def repulsive_rotational_surface(px, py, ox, oy, gx, gy,    # p = posição do r
     dx, dy = px - ox, py - oy
     d = math.hypot(dx, dy)  # distância euclidiana entre o robô e o obstaculo
     
-    d_surf = d - r_clear    # distância até a superficie
+    d_surf = d - r_clear    # distância até a superficie do obstaculo
     ex, ey = dx / d, dy / d # vetor: obstaculo -> robô unitário
 
     # vetor obstáculo -> goal
@@ -307,8 +307,8 @@ def main():
             )
 
             dist_goal = math.hypot(sx - x, sy - y)
-            if dist_goal < 3.0 * rp.GOAL_TOL:
-                v_cmd *= 0.3
+            if dist_goal < 2.0 * rp.GOAL_TOL:
+                v_cmd *= 0.6
 
             v_cmd = saturate(v_cmd, -rp.V_MAX, rp.V_MAX)
             w_cmd = saturate(w_cmd, -rp.W_MAX, rp.W_MAX)
