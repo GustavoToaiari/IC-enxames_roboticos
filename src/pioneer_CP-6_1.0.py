@@ -11,15 +11,15 @@ class RobotParams:
     AXLE_LENGTH: float = 0.331
     LEFT_SIGN: int = 1
     RIGHT_SIGN: int = 1
-    V_MAX: float = 0.40
-    W_MAX: float = 1.2
+    V_MAX: float = 1.20
+    W_MAX: float = 3.6
     WHEEL_OMEGA_MAX: float = 12.0
-    GOAL_TOL: float = 0.10
+    GOAL_TOL: float = 0.20
     ROBOT_RADIUS: float = 0.20
 
 @dataclass
 class WorldParams:
-    OBSTACLE_RADIUS: float = 0.50   # raio físico do pilar
+    OBSTACLE_RADIUS: float = 1.50   # raio físico do pilar
     OBSTACLE_PREFIX: str = '80cmHighPillar25cm'  # para auto-descobrir os obstáculos
     GOAL_WIDTH: float = 10.0       # largura do goal (retângulo)
     GOAL_HEIGHT: float = 1.0      # altura do goal (retângulo)
@@ -28,9 +28,9 @@ class WorldParams:
 class FieldGains:
     # Campo potencial
     K_ATT: float = 1.0  # força de atração
-    K_REP: float = 3.5  # força de repulsão
+    K_REP: float = 2.5  # força de repulsão
     RHO_0: float = 1.0  # janela de influência sobre d_surf
-    K_ROT: float = 0.7  # rotacional/tangencial p/ contornar
+    K_ROT: float = 2.7  # rotacional/tangencial p/ contornar
     # Mapeamento vetor -> (v,w)
     K_V: float = 1.0    # mapeamento campo -> v
     K_W: float = 2.2    # mapeamento campo -> w
@@ -269,7 +269,7 @@ def main():
                 rob['reached'] = True
                 sim.setJointTargetVelocity(rob['left_motor'], 0.0)
                 sim.setJointTargetVelocity(rob['right_motor'], 0.0)
-                print('Um robô chegou ao seu sub-goal em', sx, sy)
+                print('Um robô chegou ao seu sub-goal')
 
         # Se todos chegaram, encerra
         if all(rob['reached'] for rob in robots):
@@ -308,7 +308,7 @@ def main():
 
             dist_goal = math.hypot(sx - x, sy - y)
             if dist_goal < 2.0 * rp.GOAL_TOL:
-                v_cmd *= 0.6
+                v_cmd *= 0.4
 
             v_cmd = saturate(v_cmd, -rp.V_MAX, rp.V_MAX)
             w_cmd = saturate(w_cmd, -rp.W_MAX, rp.W_MAX)
