@@ -489,7 +489,6 @@ def main():
     ]
     # Cria os 6 robôs
     robots = []
-    print("Teste 7")
     for r_path, l_path, rr_path in zip(robot_paths, left_motor_paths, right_motor_paths):
         robots.append(DifferentialDriveRobot(sim, rp,
                                              robot_path=r_path,
