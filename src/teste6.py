@@ -291,16 +291,13 @@ class MultiRobotNavigator:
             ax.plot(xs, ys, label=f'Robô {i}')
             # posição inicial
             ax.scatter(xs[0], ys[0], marker='o', s=40)
-            ax.text(xs[0], ys[0], f'R{i}_ini', fontsize=8, va='bottom')
             # posição final
             ax.scatter(xs[-1], ys[-1], marker='x', s=50)
-            ax.text(xs[-1], ys[-1], f'R{i}_fin', fontsize=8, va='top')
 
         # Goals
         for i, goal_h in enumerate(self.goals):
             gx, gy, _ = self.sim.get_position(goal_h)
             ax.scatter(gx, gy, marker='*', s=80)
-            ax.text(gx, gy, f'G{i}', fontsize=9, va='bottom', ha='center')
 
         # Obstáculos e raio do campo
         for k, obst_h in enumerate(self.obstacles):
@@ -314,7 +311,6 @@ class MultiRobotNavigator:
                 linewidth=1.5
             )
             ax.add_patch(obst_circle)
-            ax.text(ox, oy, f'O{k}', fontsize=8, ha='center', va='center')
 
             # círculo do campo de influência: r_clear_obst + RHO_0
             field_radius = self.r_clear_obst + self.gains.RHO_0
@@ -331,7 +327,7 @@ class MultiRobotNavigator:
         ax.grid(True)
         ax.set_xlabel('x [m]')
         ax.set_ylabel('y [m]')
-        ax.set_title('Trajetórias dos robôs, obstáculos e campos de influência')
+        ax.set_title('Trajetórias dos Pioneers com repulsão mútua e sub-goals')
         ax.legend()
         plt.show()
 
