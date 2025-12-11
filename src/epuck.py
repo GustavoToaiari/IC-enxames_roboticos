@@ -1,6 +1,7 @@
 from coppeliasim_zmqremoteapi_client import RemoteAPIClient
 import time
 import math
+import numpy as np
 
 # Conectar ao CoppeliaSIM
 client = RemoteAPIClient()
@@ -15,10 +16,15 @@ wheel1 = sim.getObject('/ePuck/leftJoint/leftRespondableWheel')  # Roda esquerda
 wheel2 = sim.getObject('/ePuck/rightJoint/rightRespondableWheel')  # Roda direita
 
 # Raio das rodas do ePuck
-wheel_radius = 0.033  # Ajuste conforme o valor correto para o ePuck
+wheel_radius = 0.0425/2  # Ajuste conforme o valor correto para o ePuck
 wheel_pos = sim.getObjectPosition(wheel1, sim.handle_world)
 center_pos = sim.getObjectPosition(robot, sim.handle_world)
-L = 0.1  # Distância entre as rodas do ePuck, ajustado conforme necessário
+
+# center = sim.getObjectPosition(robot, sim.handle_world) # Pega posição do centro do robô
+# wheel0_pos = sim.getObjectPosition(wheel1, sim.handle_world) # Pega posição da roda (junta)
+# L = 2*(np.sqrt((wheel0_pos[0]-center[0])**2 + (wheel0_pos[1]-center[1])**2)) # Distância entre as rodas
+# print(L)
+L = 0.054
 
 # Verificar e iniciar a simulação
 if sim.getSimulationState() != 0:
@@ -29,15 +35,19 @@ sim.startSimulation()
 sim.step()
 
 # Definir os Goals (ajustar conforme necessário no seu cenário)
-goal_names = ['/Goal']
+goal_names = ['/Goal0', '/Goal1', '/Goal2', '/Goal3', '/Goal4']
 goals = [sim.getObject(name) for name in goal_names]
 
-k_v = 0.4   # Ganho linear
-k_w = 0.8   # Ganho angular
+k_v = 0.1   # Ganho linear
+k_w = 1.2   # Ganho angular
+
+for i, goal in enumerate(goals):
+        gx, gy, _ = sim.getObjectPosition(goal, sim.handle_world)   # Posição do Goal
+        print(f"Posição do Goal {i}: x = {gx:.3f}, y = {gy:.3f}")
 
 # Controlar o ePuck para ir até cada Goal
 for i, goal in enumerate(goals):
-    print(f"Indo para o Goal {i+1}...")
+    print(f"Indo para o Goal {i}...")
     while True:
         pos = sim.getObjectPosition(robot, sim.handle_world)    # Posição [x, y, z]
         ori = sim.getObjectOrientation(robot, sim.handle_world) # Orientação [alpha, beta, gamma]
@@ -45,12 +55,13 @@ for i, goal in enumerate(goals):
 
         gx, gy, _ = sim.getObjectPosition(goal, sim.handle_world)   # Posição do Goal
 
+
         dx = gx - pos[0]
         dy = gy - pos[1]
         distancia = math.sqrt(dx**2 + dy**2)
 
         if distancia < 0.2:   # Para se a distância euclidiana for menor que 20 cm
-            print(f"Goal {i+1} encontrado, distância final={distancia:.3f} m")
+            print(f"Goal {i} encontrado, distância final={distancia:.3f} m")
             break  # Sai do loop 'while'
 
         # Calcular o ângulo desejado para o movimento
@@ -60,7 +71,7 @@ for i, goal in enumerate(goals):
         erro_theta = math.atan2(math.sin(erro_theta), math.cos(erro_theta))
 
         v = k_v * distancia  # Velocidade linear proporcional à distância
-        v = max(0.3, min(v, 0.8))  # Limitar a velocidade entre 0.3 e 0.8 m/s
+        v = max(0.15, min(v, 0.4))  # Limitar a velocidade entre 0.3 e 0.8 m/s
         w = k_w * erro_theta  # Velocidade angular proporcional ao erro de orientação
 
         # Cálculo das velocidades das rodas
