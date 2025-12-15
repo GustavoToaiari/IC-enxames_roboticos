@@ -8,23 +8,15 @@ client = RemoteAPIClient()
 sim = client.getObject('sim')
 sim.setStepping(True)
 
-# Obter o robô e os motores (ajuste os caminhos conforme necessário)
+# Obter o robô e os motores
 robot = sim.getObject('/ePuck')
-left_motor = sim.getObject('/ePuck/leftJoint')  # Motor esquerdo
-right_motor = sim.getObject('/ePuck/rightJoint')  # Motor direito
-wheel1 = sim.getObject('/ePuck/leftJoint/leftRespondableWheel')  # Roda esquerda
-wheel2 = sim.getObject('/ePuck/rightJoint/rightRespondableWheel')  # Roda direita
+left_motor = sim.getObject('/ePuck/leftJoint')
+right_motor = sim.getObject('/ePuck/rightJoint')
+goal = sim.getObject('/Goal0')  # Ajuste para o nome do Goal
 
 # Raio das rodas do ePuck
-wheel_radius = 0.0425/2  # Ajuste conforme o valor correto para o ePuck
-wheel_pos = sim.getObjectPosition(wheel1, sim.handle_world)
-center_pos = sim.getObjectPosition(robot, sim.handle_world)
-
-# center = sim.getObjectPosition(robot, sim.handle_world) # Pega posição do centro do robô
-# wheel0_pos = sim.getObjectPosition(wheel1, sim.handle_world) # Pega posição da roda (junta)
-# L = 2*(np.sqrt((wheel0_pos[0]-center[0])**2 + (wheel0_pos[1]-center[1])**2)) # Distância entre as rodas
-# print(L)
-L = 0.054
+wheel_radius = 0.0425 / 2
+L = 0.054  # Distância entre as rodas
 
 # Verificar e iniciar a simulação
 if sim.getSimulationState() != 0:
@@ -34,57 +26,62 @@ if sim.getSimulationState() != 0:
 sim.startSimulation()
 sim.step()
 
-# Definir os Goals (ajustar conforme necessário no seu cenário)
-goal_names = ['/Goal0', '/Goal1', '/Goal2', '/Goal3', '/Goal4']
-goals = [sim.getObject(name) for name in goal_names]
+k_v = 0.2   # Ganho linear ajustado
+k_w = 0.5   # Ganho angular ajustado
 
-k_v = 0.1   # Ganho linear
-k_w = 1.2   # Ganho angular
+# Controlar o ePuck
+while True:
+    pos = sim.getObjectPosition(robot, sim.handle_world)    # Posição do robô
+    ori = sim.getObjectOrientation(robot, sim.handle_world) # Orientação do robô
+    theta = ori[2]  # Angulo yaw
+    print(f"theta: ", theta)
 
-for i, goal in enumerate(goals):
-        gx, gy, _ = sim.getObjectPosition(goal, sim.handle_world)   # Posição do Goal
-        print(f"Posição do Goal {i}: x = {gx:.3f}, y = {gy:.3f}")
+    # Posição do Goal
+    gx, gy, _ = sim.getObjectPosition(goal, sim.handle_world)
 
-# Controlar o ePuck para ir até cada Goal
-for i, goal in enumerate(goals):
-    print(f"Indo para o Goal {i}...")
-    while True:
-        pos = sim.getObjectPosition(robot, sim.handle_world)    # Posição [x, y, z]
-        ori = sim.getObjectOrientation(robot, sim.handle_world) # Orientação [alpha, beta, gamma]
-        theta = ori[2]  # yaw (rotação no plano XY)
+    # Cálculo da distância e erro angular
+    dx = gx - pos[0]
+    dy = gy - pos[1]
+    distancia = math.sqrt(dx**2 + dy**2)
 
-        gx, gy, _ = sim.getObjectPosition(goal, sim.handle_world)   # Posição do Goal
+    if distancia < 0.05:  # Se o robô estiver suficientemente próximo, pare
+        break
 
+    angulo_desejado = math.atan2(dy, dx)
+    erro_theta = angulo_desejado - theta
+    erro_theta = math.atan2(math.sin(erro_theta), math.cos(erro_theta))  # Normaliza o erro de orientação
 
-        dx = gx - pos[0]
-        dy = gy - pos[1]
-        distancia = math.sqrt(dx**2 + dy**2)
+    # Calcular as velocidades
+    v = k_v * distancia
+    v = max(0.15, min(v, 0.4))  # Limitar a velocidade linear
+    w = max(-1.0, min(k_w * erro_theta, 1.0))  # Limitar a velocidade angular
 
-        if distancia < 0.2:   # Para se a distância euclidiana for menor que 20 cm
-            print(f"Goal {i} encontrado, distância final={distancia:.3f} m")
-            break  # Sai do loop 'while'
+    # Velocidades das rodas
+    v_r = (2 * v + w * L) / (2 * wheel_radius)
+    v_l = (2 * v - w * L) / (2 * wheel_radius)
 
-        # Calcular o ângulo desejado para o movimento
-        angulo_desejado = math.atan2(dy, dx)
-        erro_theta = angulo_desejado - theta
-        # Normalizar o erro de orientação para o intervalo [-pi, pi]
-        erro_theta = math.atan2(math.sin(erro_theta), math.cos(erro_theta))
+    # Limitar as velocidades das rodas
+    max_wheel_speed = 6.28  # Defina o limite de velocidade para as rodas
+    v_r = np.clip(v_r, -max_wheel_speed, max_wheel_speed)
+    v_l = np.clip(v_l, -max_wheel_speed, max_wheel_speed)
 
-        v = k_v * distancia  # Velocidade linear proporcional à distância
-        v = max(0.15, min(v, 0.4))  # Limitar a velocidade entre 0.3 e 0.8 m/s
-        w = k_w * erro_theta  # Velocidade angular proporcional ao erro de orientação
+    # Verificar as velocidades das rodas
+    print(f"v_l: {v_l}, v_r: {v_r}")
 
-        # Cálculo das velocidades das rodas
-        v_r = (2*v + w*L) / (2*wheel_radius)
-        v_l = (2*v - w*L) / (2*wheel_radius)
+    # Definir as velocidades das rodas
+    sim.setJointTargetVelocity(left_motor, v_l)
+    sim.setJointTargetVelocity(right_motor, v_r)
 
-        # Definir as velocidades das rodas no CoppeliaSIM
-        sim.setJointTargetVelocity(left_motor, v_l)
-        sim.setJointTargetVelocity(right_motor, v_r)
+    # Verificar a posição do robô
+    print(f"Posição do robô: {pos}")
+    print(f"Posição do Goal: {gx}, {gy}")
+    print(f"Distância: {distancia}")
+    print(f"Erro de orientação (Theta): {erro_theta}")
+    
+    sim.step()
+    time.sleep(0.01)
 
-        sim.step()
-
-# Parar no Goal
+# Parar o robô no goal
 sim.setJointTargetVelocity(left_motor, 0)
 sim.setJointTargetVelocity(right_motor, 0)
 print("Robô chegou ao goal!")
