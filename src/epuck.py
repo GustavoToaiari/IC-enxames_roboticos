@@ -9,7 +9,7 @@ sim = client.getObject('sim')
 sim.setStepping(True)
 
 # Obter o robô e os motores
-robot = sim.getObject('/ePuck')
+robot = sim.getObject('/ePuck/base')
 left_motor = sim.getObject('/ePuck/leftJoint')
 right_motor = sim.getObject('/ePuck/rightJoint')
 goal = sim.getObject('/Goal0')  # Ajuste para o nome do Goal
@@ -34,6 +34,7 @@ while True:
     pos = sim.getObjectPosition(robot, sim.handle_world)    # Posição do robô
     ori = sim.getObjectOrientation(robot, sim.handle_world) # Orientação do robô
     theta = ori[2]  # Angulo yaw
+    theta = theta + math.pi/2  # Ajuste do ângulo
     print(f"theta: ", theta)
 
     # Posição do Goal
@@ -44,7 +45,7 @@ while True:
     dy = gy - pos[1]
     distancia = math.sqrt(dx**2 + dy**2)
 
-    if distancia < 0.05:  # Se o robô estiver suficientemente próximo, pare
+    if distancia < 0.1:  # Se o robô estiver suficientemente próximo, pare
         break
 
     angulo_desejado = math.atan2(dy, dx)
@@ -61,7 +62,7 @@ while True:
     v_l = (2 * v - w * L) / (2 * wheel_radius)
 
     # Limitar as velocidades das rodas
-    max_wheel_speed = 6.28  # Defina o limite de velocidade para as rodas
+    max_wheel_speed = 12  # Defina o limite de velocidade para as rodas
     v_r = np.clip(v_r, -max_wheel_speed, max_wheel_speed)
     v_l = np.clip(v_l, -max_wheel_speed, max_wheel_speed)
 
@@ -76,6 +77,7 @@ while True:
     print(f"Posição do robô: {pos}")
     print(f"Posição do Goal: {gx}, {gy}")
     print(f"Distância: {distancia}")
+    print(f"angulo desejado: {angulo_desejado}")
     print(f"Erro de orientação (Theta): {erro_theta}")
     
     sim.step()
