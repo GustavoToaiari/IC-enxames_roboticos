@@ -11,15 +11,15 @@ class RobotParams:
     AXLE_LENGTH: float = 0.331
     LEFT_SIGN: int = 1
     RIGHT_SIGN: int = 1
-    V_MAX: float = 1.20
-    W_MAX: float = 3.6
+    V_MAX: float = 0.8
+    W_MAX: float = 2.4
     WHEEL_OMEGA_MAX: float = 12.0
-    GOAL_TOL: float = 0.20
+    GOAL_TOL: float = 0.10
     ROBOT_RADIUS: float = 0.20
 
 @dataclass
 class WorldParams:
-    OBSTACLE_RADIUS: float = 1.50   # raio físico do pilar
+    OBSTACLE_RADIUS: float = 0.50   # raio físico do pilar
     OBSTACLE_PREFIX: str = '80cmHighPillar25cm'  # para auto-descobrir os obstáculos
     GOAL_WIDTH: float = 10.0       # largura do goal (retângulo)
     GOAL_HEIGHT: float = 1.0      # altura do goal (retângulo)
@@ -28,9 +28,9 @@ class WorldParams:
 class FieldGains:
     # Campo potencial
     K_ATT: float = 1.0  # força de atração
-    K_REP: float = 2.5  # força de repulsão
+    K_REP: float = 10  # força de repulsão
     RHO_0: float = 1.0  # janela de influência sobre d_surf
-    K_ROT: float = 2.7  # rotacional/tangencial p/ contornar
+    K_ROT: float = 20  # rotacional/tangencial p/ contornar
     # Mapeamento vetor -> (v,w)
     K_V: float = 1.0    # mapeamento campo -> v
     K_W: float = 2.2    # mapeamento campo -> w
