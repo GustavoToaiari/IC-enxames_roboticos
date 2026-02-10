@@ -3,9 +3,8 @@ import time
 import matplotlib.pyplot as plt
 from coppeliasim_zmqremoteapi_client import RemoteAPIClient
 
-# =========================
-# "Constantes" (bem direto)
-# =========================
+
+# Constantes
 WHEEL_RADIUS = 0.0975
 AXLE_LENGTH  = 0.331
 LEFT_SIGN    = 1
@@ -35,9 +34,8 @@ K_V = 1.0
 K_W = 2.2
 
 
-# =========================
-# Funções pequenas (úteis)
-# =========================
+
+# Funções pequenas
 def yaw_from_quaternion(qx, qy, qz, qw):
     return math.atan2(2.0 * (qw*qz + qx*qy), 1.0 - 2.0 * (qy*qy + qz*qz))
 
@@ -83,7 +81,6 @@ def repulsive_rotational_surface(px, py, ox, oy, gx, gy, r_clear):
         return 0.0, 0.0, d_surf
 
     # dentro da influência
-    # (mesma fórmula que você usava)
     mag = (1.0/d_surf - 1.0/RHO_0) * (1.0/(d_surf*d_surf))
 
     mag_rep = K_REP * mag
@@ -99,19 +96,15 @@ def repulsive_rotational_surface(px, py, ox, oy, gx, gy, r_clear):
     return Fx_rep + Fx_rot, Fy_rep + Fy_rot, d_surf
 
 
-# =========================
-# Programa principal
-# =========================
+# Principal
 def main():
     client = RemoteAPIClient()
     sim = client.getObject('sim')
     client.setStepping(True)
 
-    N = 6  # robôs
+    N = 6  # Número de robôs
 
-    # -------------------------
-    # Pega handles dos robôs
-    # -------------------------
+    # Handles dos robôs
     robots = []
     for i in range(N):
         suffix = '' if i == 0 else str(i + 1)
@@ -135,9 +128,7 @@ def main():
     if sim.getSimulationState() == sim.simulation_stopped:
         sim.startSimulation()
 
-    # -------------------------
-    # Obstáculos (hardcoded)
-    # -------------------------
+    # Obstáculos
     obstacle_handles = [
         sim.getObject('/80cmHighPillar25cm0'),
         sim.getObject('/80cmHighPillar25cm1'),
@@ -154,9 +145,7 @@ def main():
     r_clear_env = ROBOT_RADIUS + OBSTACLE_RADIUS
     r_clear_rr  = 2.0 * ROBOT_RADIUS
 
-    # -------------------------
     # Goal e subgoals
-    # -------------------------
     gx, gy, _ = sim.getObjectPosition(goal_h, sim.handle_world)
 
     spacing_x = GOAL_WIDTH / (N - 1) if N > 1 else 0.0
@@ -165,9 +154,7 @@ def main():
         sy = gy
         robots[k]['subgoal'] = (sx, sy)
 
-    # -------------------------
     # Loop simulação
-    # -------------------------
     start_time = time.time()
 
     while True:
@@ -181,13 +168,14 @@ def main():
             rob['pose'] = (x, y, yaw)
             rob['traj'].append((x, y))
 
-        # 2) Chegou no subgoal? para
+        # 2) Checa se algum robô chegou ao sub-goal
         for rob in robots:
             if rob['reached']:
                 continue
             sx, sy = rob['subgoal']
             x, y, _ = rob['pose']
 
+            # Se chegou, para o robô e marca como "reached"
             if math.hypot(sx - x, sy - y) <= GOAL_TOL:
                 rob['reached'] = True
                 sim.setJointTargetVelocity(rob['lm'], 0.0)
@@ -207,24 +195,18 @@ def main():
             x, y, yaw = rob['pose']
             sx, sy = rob['subgoal']
 
-            # ---------
             # Campo atrativo
-            # ---------
             Fx = K_ATT * (sx - x)
             Fy = K_ATT * (sy - y)
 
-            # ---------
             # Repulsão + rotacional dos pilares
-            # ---------
             for h in obstacle_handles:
                 ox, oy, _ = sim.getObjectPosition(h, sim.handle_world)
                 fxi, fyi, _ = repulsive_rotational_surface(x, y, ox, oy, sx, sy, r_clear_env)
                 Fx += fxi
                 Fy += fyi
 
-            # ---------
             # Outros robôs como obstáculos móveis
-            # ---------
             for j, other in enumerate(robots):
                 if j == i:
                     continue
@@ -235,9 +217,7 @@ def main():
                 Fx += fxi
                 Fy += fyi
 
-            # ---------
             # Força (mundo) -> comando (v,w)
-            # ---------
             vx_b, vy_b = world_to_body(Fx, Fy, yaw)
 
             v_cmd = K_V * math.hypot(vx_b, vy_b)
@@ -264,9 +244,7 @@ def main():
             print("Timeout. Encerrando.")
             break
 
-    # -------------------------
     # Para tudo e plota
-    # -------------------------
     for rob in robots:
         sim.setJointTargetVelocity(rob['lm'], 0.0)
         sim.setJointTargetVelocity(rob['rm'], 0.0)
