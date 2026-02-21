@@ -20,7 +20,7 @@ ROBOT_RADIUS = 0.20
 OBSTACLE_RADIUS = 0.50
 
 # Retângulo de sub-goals no goal
-GOAL_WIDTH  = 10.0
+GOAL_WIDTH  = 18.0
 GOAL_HEIGHT = 1.0
 
 # Ganhos do campo
@@ -102,7 +102,7 @@ def main():
     sim = client.getObject('sim')
     client.setStepping(True)
 
-    N = 6  # Número de robôs
+    N = 10  # Número de robôs
 
     # Handles dos robôs
     robots = []
