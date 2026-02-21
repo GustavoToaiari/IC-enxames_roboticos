@@ -1,3 +1,5 @@
+# Controle de múltiplos robôs Pioneer P3-DX em CoppeliaSim usando campo potencial.
+
 import math
 import time
 import matplotlib.pyplot as plt
