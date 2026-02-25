@@ -12,7 +12,7 @@ sim.setStepping(True)
 robot = sim.getObject('/ePuck/base')
 left_motor = sim.getObject('/ePuck/leftJoint')
 right_motor = sim.getObject('/ePuck/rightJoint')
-goal = sim.getObject('/Goal0')  # Ajuste para o nome do Goal
+goal = sim.getObject('/Goal0')
 
 # Raio das rodas do ePuck
 wheel_radius = 0.0425 / 2
@@ -27,7 +27,7 @@ sim.startSimulation()
 sim.step()
 
 k_v = 0.2   # Ganho linear ajustado
-k_w = 0.5   # Ganho angular ajustado
+k_w = 0.8   # Ganho angular ajustado
 
 # Controlar o ePuck
 while True:
@@ -45,7 +45,7 @@ while True:
     dy = gy - pos[1]
     distancia = math.sqrt(dx**2 + dy**2)
 
-    if distancia < 0.1:  # Se o robô estiver suficientemente próximo, pare
+    if distancia < 0.05:  # Se o robô estiver suficientemente próximo, pare
         break
 
     angulo_desejado = math.atan2(dy, dx)
@@ -62,23 +62,13 @@ while True:
     v_l = (2 * v - w * L) / (2 * wheel_radius)
 
     # Limitar as velocidades das rodas
-    max_wheel_speed = 12  # Defina o limite de velocidade para as rodas
+    max_wheel_speed = 20  # Defina o limite de velocidade para as rodas
     v_r = np.clip(v_r, -max_wheel_speed, max_wheel_speed)
     v_l = np.clip(v_l, -max_wheel_speed, max_wheel_speed)
-
-    # Verificar as velocidades das rodas
-    print(f"v_l: {v_l}, v_r: {v_r}")
 
     # Definir as velocidades das rodas
     sim.setJointTargetVelocity(left_motor, v_l)
     sim.setJointTargetVelocity(right_motor, v_r)
-
-    # Verificar a posição do robô
-    print(f"Posição do robô: {pos}")
-    print(f"Posição do Goal: {gx}, {gy}")
-    print(f"Distância: {distancia}")
-    print(f"angulo desejado: {angulo_desejado}")
-    print(f"Erro de orientação (Theta): {erro_theta}")
     
     sim.step()
     time.sleep(0.01)
