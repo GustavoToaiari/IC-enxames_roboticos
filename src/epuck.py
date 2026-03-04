@@ -154,7 +154,8 @@ def main():
         robots[k]['subgoal'] = (sx, sy)
 
     # Loop simulação
-    start_time = time.time()
+    # start_time = time.time() # Funciona bem no meu computador pessoal | Usa o tempo real
+    start_sim = sim.getSimulationTime() # Funciona bem no computador do SIRO | Usa o tempo de simulação
 
     while True:
         client.step()
@@ -199,8 +200,7 @@ def main():
             Fy = K_ATT * (sy - y)
 
             # Repulsão + rotacional dos pilares
-            for h in obstacle_handles:
-                ox, oy, _ = sim.getObjectPosition(h, sim.handle_world)
+            for (ox, oy) in obstacles_xy: 
                 fxi, fyi, _ = repulsive_rotational_surface(x, y, ox, oy, sx, sy, r_clear_env)
                 Fx += fxi
                 Fy += fyi
@@ -224,7 +224,7 @@ def main():
 
             # desacelera perto do sub-goal
             dist_goal = math.hypot(sx - x, sy - y)
-            if dist_goal < 0.4:
+            if dist_goal < 0.2:
                 v_cmd *= 0.25   # freia forte quando está realmente perto
             elif dist_goal < 0.8:
                 v_cmd *= 0.5    # freia moderado
@@ -241,9 +241,11 @@ def main():
             sim.setJointTargetVelocity(rob['rm'], wr)
 
         # 5) timeout
-        if time.time() - start_time > 60:
+        # if time.time() - start_time > 60: # Funciona bem no meu computador pessoal
+        if sim.getSimulationTime() - start_sim > 60: # Funciona bem no computador do SIRO
             print("Timeout. Encerrando.")
             break
+        
 
     # Para tudo e plota
     for rob in robots:
