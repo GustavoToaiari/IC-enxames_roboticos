@@ -14,10 +14,10 @@ V_MAX = 0.4
 W_MAX = 1.0
 WHEEL_OMEGA_MAX = 20.0
 
-GOAL_TOL = 0.1
+GOAL_TOL = 0.25
 ROBOT_RADIUS = 0.0724/2
 
-OBSTACLE_RADIUS = 0.25
+OBSTACLE_RADIUS = 0.5
 
 # Retângulo de sub-goals no goal
 GOAL_WIDTH  = 8.0
@@ -26,7 +26,7 @@ GOAL_HEIGHT = 1.0
 # Ganhos do campo
 K_ATT = 1.0
 K_REP = 10.0
-RHO_0 = 1.0
+RHO_0 = 0.5
 K_ROT = 20.0
 
 # Mapeamento força -> (v,w)
@@ -224,10 +224,10 @@ def main():
 
             # desacelera perto do sub-goal
             dist_goal = math.hypot(sx - x, sy - y)
-            if dist_goal < 0.2:
-                v_cmd *= 0.25   # freia forte quando está realmente perto
-            elif dist_goal < 0.8:
-                v_cmd *= 0.5    # freia moderado
+            #if dist_goal < 0.4:
+            #    v_cmd *= 0.65   # freia forte quando está realmente perto
+            #elif dist_goal < 0.8:
+            #    v_cmd *= 0.8    # freia moderado
 
             # saturações
             v_cmd = saturate(v_cmd, -V_MAX, V_MAX)
