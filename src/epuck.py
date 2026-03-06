@@ -272,15 +272,16 @@ def main():
         ax.plot(xs[-1], ys[-1], 'o', markersize=5)
 
     # goal (centro) + retângulo
-    ax.plot(gx, gy, '*', markersize=14, label='goal (centro)')
-    ax.add_patch(plt.Rectangle((gx - GOAL_WIDTH/2, gy - GOAL_HEIGHT/2),
-                               GOAL_WIDTH, GOAL_HEIGHT,
-                               fill=False, linestyle='-', alpha=0.8))
+    # ax.plot(gx, gy, '*', markersize=14, label='goal (centro)')
+    # ax.add_patch(plt.Rectangle((gx - GOAL_WIDTH/2, gy - GOAL_HEIGHT/2),
+    #                           GOAL_WIDTH, GOAL_HEIGHT,
+    #                           fill=False, linestyle='-', alpha=0.8))
+    # Comentei esses plots para deixar menos poluido.
 
     # subgoals
     for k, rob in enumerate(robots):
         sx, sy = rob['subgoal']
-        ax.plot(sx, sy, '^', markersize=7)
+        ax.plot(sx, sy, '^', markersize=7, color = 'black')
 
     ax.set_xlabel('x [m]')
     ax.set_ylabel('y [m]')
