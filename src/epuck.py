@@ -11,13 +11,13 @@ LEFT_SIGN    = 1
 RIGHT_SIGN   = 1
 
 V_MAX = 0.4
-W_MAX = 1.0
+W_MAX = 4.5
 WHEEL_OMEGA_MAX = 20.0
 
 GOAL_TOL = 0.25
 ROBOT_RADIUS = 0.0724/2
 
-OBSTACLE_RADIUS = 0.5
+OBSTACLE_RADIUS = 0.25
 
 # Retângulo de sub-goals no goal
 GOAL_WIDTH  = 8.0
@@ -27,12 +27,13 @@ GOAL_HEIGHT = 1.0
 K_ATT = 1.0
 K_REP = 10.0
 RHO_0 = 0.5
-K_ROT = 20.0
+K_ROT = 50.0
 
 # Mapeamento força -> (v,w)
 K_V = 0.2
-K_W = 1.8
+K_W = 4.8
 
+colors = ['blue', 'green', 'red', 'orange', 'purple', 'brown', 'pink', 'cyan', 'magenta', 'yellow']
 
 # Funções pequenas
 def yaw_from_quaternion(qx, qy, qz, qw):
@@ -102,7 +103,7 @@ def main():
     client.setStepping(True)
 
     N = 10  # Número de robôs
-
+    
     # Handles dos robôs
     robots = []
     for i in range(N):
@@ -111,6 +112,7 @@ def main():
         rob_h = sim.getObject('/base' + suffix)
         lm_h  = sim.getObject('/leftJoint' + suffix)
         rm_h  = sim.getObject('/rightJoint' + suffix)
+        
 
         robots.append({
             'rob': rob_h,
@@ -119,7 +121,8 @@ def main():
             'traj': [],
             'reached': False,
             'pose': (0.0, 0.0, 0.0),
-            'subgoal': (0.0, 0.0)
+            'subgoal': (0.0, 0.0),
+            'color': colors[i]
         })
 
     goal_h = sim.getObject('/Goal')
@@ -133,6 +136,16 @@ def main():
         sim.getObject('/80cmHighPillar25cm1'),
         sim.getObject('/80cmHighPillar25cm2'),
         sim.getObject('/80cmHighPillar25cm3'),
+        sim.getObject('/80cmHighPillar25cm4'),
+        sim.getObject('/80cmHighPillar25cm5'),
+        sim.getObject('/80cmHighPillar25cm6'),
+        sim.getObject('/80cmHighPillar25cm7'),
+        sim.getObject('/80cmHighPillar25cm8'),
+        sim.getObject('/80cmHighPillar25cm9'),
+        sim.getObject('/80cmHighPillar25cm10'),
+        sim.getObject('/80cmHighPillar25cm11'),
+        sim.getObject('/80cmHighPillar25cm12'),
+        sim.getObject('/80cmHighPillar25cm13'),
     ]
 
     obstacles_xy = []
@@ -267,9 +280,10 @@ def main():
             continue
         xs = [p[0] for p in rob['traj']]
         ys = [p[1] for p in rob['traj']]
-        ax.plot(xs, ys, label=f'robô {idx+1}')
-        ax.plot(xs[0], ys[0], 'x', markersize=6)
-        ax.plot(xs[-1], ys[-1], 'o', markersize=5)
+        ax.plot(xs, ys, label=f'robô {idx+1}', color=rob['color'])  # Usando a cor única para cada robô
+
+        ax.plot(xs[0], ys[0], 'x', markersize=6, color=rob['color'])  # Cor para a posição inicial
+        ax.plot(xs[-1], ys[-1], 'o', markersize=5, color=rob['color'])  # Cor para a posição final
 
     # goal (centro) + retângulo
     # ax.plot(gx, gy, '*', markersize=14, label='goal (centro)')
@@ -282,6 +296,10 @@ def main():
     for k, rob in enumerate(robots):
         sx, sy = rob['subgoal']
         ax.plot(sx, sy, '^', markersize=7, color = 'black')
+
+        # Inverter os eixos X e Y para rotacionar o gráfico em 180 graus
+    ax.invert_yaxis()  # Inverte o eixo Y
+    ax.invert_xaxis()  # Inverte o eixo X (opcional)
 
     ax.set_xlabel('x [m]')
     ax.set_ylabel('y [m]')
