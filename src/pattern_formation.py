@@ -13,9 +13,7 @@ class Robot:
 
 
 class RobotFormation:
-    # =========================
     # Parâmetros do robô
-    # =========================
     WHEEL_RADIUS = 0.0425 / 2
     AXLE_LENGTH = 0.054
 
@@ -26,7 +24,6 @@ class RobotFormation:
     MAX_LINEAR_SPEED = 0.20
     MAX_ANGULAR_SPEED = 2.5
 
-    # Leader um pouco mais lento para os seguidores conseguirem manter a formação
     LEADER_MAX_LINEAR_SPEED = 0.12
     FOLLOWER_MAX_LINEAR_SPEED = 0.20
 
@@ -36,24 +33,19 @@ class RobotFormation:
     CONTROL_DT = 0.05
     YAW_OFFSET = math.pi / 2
 
-    # =========================
     # Parâmetros da formação
-    # =========================
-    DESIRED_DISTANCE = 0.5      # distância entre robôs na fila
-    POSITION_TOL = 0.05         # tolerância de posição
-    GOAL_TOL = 0.08             # tolerância para o líder no goal1
+    DESIRED_DISTANCE = 0.5
+    POSITION_TOL = 0.05
+    GOAL_TOL = 0.08
     DEBUG_PRINT_DT = 0.5
-    WAIT_TIME = 5.0
+    WAIT_TIME = 2.0
 
-    # +1 ou -1 troca o lado do ápice do triângulo
     TRIANGLE_SIDE = -0.5
 
-    # =========================
     # Estados
-    # =========================
     STATE_ELECTION = "ELEICAO"
     STATE_FORM_LINE = "FORMANDO_LINHA"
-    STATE_WAIT = "ESPERANDO_5S"
+    STATE_WAIT = "ESPERANDO"
     STATE_FORM_TRIANGLE = "FORMANDO_TRIANGULO"
     STATE_NAV_TRIANGLE = "NAVEGANDO_TRIANGULO"
     STATE_GOAL_REACHED = "GOAL_ALCANCADO"
@@ -67,6 +59,10 @@ class RobotFormation:
         self.follower2_key = None
 
         self.wait_start_time = None
+        self.next_state_after_wait = None
+        self.wait_reason = ""
+        self.wait_end_message = ""
+
         self.last_debug_time = 0.0
 
         self.goal_handle = self._get_required_object("/goal1")
@@ -94,9 +90,7 @@ class RobotFormation:
 
         print("Handles obtidos com sucesso.")
 
-    # =========================
     # Utilidades gerais
-    # =========================
     def _get_required_object(self, path):
         handle = self.sim.getObject(path)
         if handle == -1:
@@ -162,9 +156,7 @@ class RobotFormation:
         y_world = y_ref + dx_local * math.sin(yaw_ref) + dy_local * math.cos(yaw_ref)
         return x_world, y_world
 
-    # =========================
     # Controle de ponto
-    # =========================
     def controller_to_point(
         self,
         x, y, yaw,
@@ -227,9 +219,33 @@ class RobotFormation:
 
         return rho, alpha, arrived
 
-    # =========================
+    # Controle genérico de espera
+    def start_wait(self, next_state, reason="", end_message=""):
+        self.stop_all_robots()
+        self.wait_start_time = time.time()
+        self.next_state_after_wait = next_state
+        self.wait_reason = reason
+        self.wait_end_message = end_message
+        self.state = self.STATE_WAIT
+
+    def handle_wait(self):
+        self.stop_all_robots()
+        self.debug_wait_status()
+
+        if self.wait_start_time is None:
+            return
+
+        if (time.time() - self.wait_start_time) >= self.WAIT_TIME:
+            if self.wait_end_message:
+                print(f"\n{self.wait_end_message}\n")
+
+            self.state = self.next_state_after_wait
+            self.wait_start_time = None
+            self.next_state_after_wait = None
+            self.wait_reason = ""
+            self.wait_end_message = ""
+
     # Lógica do líder
-    # =========================
     def elect_leader(self, poses):
         distances_to_origin = {}
         for key, (x, y, _) in poses.items():
@@ -249,9 +265,7 @@ class RobotFormation:
         print(f"Seguidor 1: {self.robots[self.follower1_key].name}")
         print(f"Seguidor 2: {self.robots[self.follower2_key].name}\n")
 
-    # =========================
     # Formação em linha
-    # =========================
     def get_line_goals(self, poses):
         xL, yL, yawL = poses[self.leader_key]
 
@@ -289,16 +303,19 @@ class RobotFormation:
         if arrived1 and arrived2:
             self.stop_robot(self.follower1_key)
             self.stop_robot(self.follower2_key)
-            self.state = self.STATE_WAIT
-            self.wait_start_time = time.time()
-            print("\nFormação em linha concluída.")
-            print("Aguardando 5 segundos para iniciar o triângulo...\n")
 
-    # =========================
+            print("\nFormação em linha concluída.")
+            print("Aguardando 2 segundos antes de iniciar o triângulo...\n")
+
+            self.start_wait(
+                next_state=self.STATE_FORM_TRIANGLE,
+                reason="Pausa após formação em linha",
+                end_message="Iniciando formação em triângulo..."
+            )
+
     # Formação em triângulo parada
     # Base = líder + seguidor2
     # Quem sobe = seguidor1
-    # =========================
     def get_triangle_goal_stationary(self, poses):
         xL, yL, _ = poses[self.leader_key]
         xB, yB, _ = poses[self.follower2_key]
@@ -347,32 +364,26 @@ class RobotFormation:
 
         if arrived:
             self.stop_robot(self.follower1_key)
-            self.state = self.STATE_NAV_TRIANGLE
-            print("\nFormação em triângulo concluída.")
-            print("Iniciando navegação até goal1 mantendo a formação...\n")
 
-    # =========================
+            print("\nFormação em triângulo concluída.")
+            print("Aguardando 2 segundos antes de iniciar a navegação...\n")
+
+            self.start_wait(
+                next_state=self.STATE_NAV_TRIANGLE,
+                reason="Pausa após formação em triângulo",
+                end_message="Iniciando navegação até goal1 mantendo a formação..."
+            )
+
     # Navegação em triângulo
-    # Líder vai ao goal1
-    # Seguidores perseguem vértices relativos ao líder
-    # Geometria mantida:
-    #   líder = vértice 1
-    #   seguidor2 = vértice 2 (base, atrás do líder)
-    #   seguidor1 = vértice 3 (ápice lateral)
-    # Triângulo equilátero de lado 2*DESIRED_DISTANCE
-    # =========================
     def get_moving_triangle_goals(self, poses):
         xL, yL, yawL = poses[self.leader_key]
         d = self.DESIRED_DISTANCE
 
-        # follower2: 2d atrás do líder
         xF2_goal, yF2_goal = self.local_to_world(
             xL, yL, yawL,
             -2.0 * d, 0.0
         )
 
-        # follower1: ponto do ápice relativo ao líder
-        # lado do triângulo = 2d
         xF1_goal, yF1_goal = self.local_to_world(
             xL, yL, yawL,
             -1.0 * d,
@@ -384,7 +395,6 @@ class RobotFormation:
     def navegar_em_triangulo(self, poses):
         goal_x, goal_y = self.get_goal_position()
 
-        # 1) líder navega para o goal1
         rhoL, alphaL, arrivedL = self.go_to_point(
             self.leader_key, goal_x, goal_y, poses,
             max_linear_speed=self.LEADER_MAX_LINEAR_SPEED,
@@ -394,7 +404,6 @@ class RobotFormation:
         if arrivedL:
             self.stop_robot(self.leader_key)
 
-        # 2) seguidores navegam para vértices relativos ao líder
         (xF1_goal, yF1_goal), (xF2_goal, yF2_goal) = self.get_moving_triangle_goals(poses)
 
         rho1, alpha1, arrived1 = self.go_to_point(
@@ -416,15 +425,12 @@ class RobotFormation:
             rho2, alpha2, arrived2
         )
 
-        # Finaliza quando líder chega no goal e os seguidores fecham a formação
         if arrivedL and arrived1 and arrived2:
             self.stop_all_robots()
             self.state = self.STATE_GOAL_REACHED
             print("\nGoal alcançado com a formação triangular mantida.\n")
 
-    # =========================
     # Debug
-    # =========================
     def debug_line_status(
         self,
         poses,
@@ -460,10 +466,17 @@ class RobotFormation:
             return
 
         self.last_debug_time = now
+
+        if self.wait_start_time is None:
+            return
+
         elapsed = now - self.wait_start_time
         remaining = max(0.0, self.WAIT_TIME - elapsed)
 
-        print(f"[{self.state}] aguardando... faltam {remaining:.2f} s")
+        print(
+            f"[{self.state}] "
+            f"{self.wait_reason} | faltam {remaining:.2f} s"
+        )
 
     def debug_triangle_status(
         self,
@@ -523,9 +536,7 @@ class RobotFormation:
             f"goal=({xF2_goal:.2f}, {yF2_goal:.2f}) rho={rho2:.3f} alpha={alpha2:.3f} arrived={arrived2}"
         )
 
-    # =========================
     # Máquina de estados
-    # =========================
     def step(self):
         poses = self.get_all_poses()
 
@@ -537,12 +548,7 @@ class RobotFormation:
             self.formacao_linha(poses)
 
         elif self.state == self.STATE_WAIT:
-            self.stop_all_robots()
-            self.debug_wait_status()
-
-            if (time.time() - self.wait_start_time) >= self.WAIT_TIME:
-                print("\nIniciando formação em triângulo...\n")
-                self.state = self.STATE_FORM_TRIANGLE
+            self.handle_wait()
 
         elif self.state == self.STATE_FORM_TRIANGLE:
             self.formacao_triangulo(poses)

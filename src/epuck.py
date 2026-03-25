@@ -11,11 +11,7 @@ LEFT_SIGN    = 1
 RIGHT_SIGN   = 1
 
 V_MAX = 0.4
-<<<<<<< HEAD
 W_MAX = 2.0
-=======
-W_MAX = 4.5
->>>>>>> fe229a7ec24a7ce921edee19d0c21eb52480709e
 WHEEL_OMEGA_MAX = 20.0
 
 GOAL_TOL = 0.25
