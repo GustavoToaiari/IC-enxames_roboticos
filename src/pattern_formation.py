@@ -13,7 +13,9 @@ class Robot:
 
 
 class RobotFormation:
+    # =========================
     # Parâmetros do robô
+    # =========================
     WHEEL_RADIUS = 0.0425 / 2
     AXLE_LENGTH = 0.054
 
@@ -33,7 +35,9 @@ class RobotFormation:
     CONTROL_DT = 0.05
     YAW_OFFSET = math.pi / 2
 
+    # =========================
     # Parâmetros da formação
+    # =========================
     POSITION_TOL = 0.05
     GOAL_TOL = 0.08
     DEBUG_PRINT_DT = 0.5
@@ -44,9 +48,27 @@ class RobotFormation:
     # +1 ou -1 define o lado do ápice
     TRIANGLE_SIDE = -1.0
 
-    # parâmetros de peer detection inspirados no artigo
-    PEER_RANGE = 2.0                 # alcance de detecção
-    PEER_FOV_DEG = 120.0             # campo de visão em graus
+    # =========================
+    # Peer detection
+    # =========================
+    PEER_RANGE = 2.0
+    PEER_FOV_DEG = 360.0
+
+    # =========================
+    # Campo potencial entre robôs
+    # (mesma ideia do código que você enviou)
+    # =========================
+    ENABLE_INTER_ROBOT_AVOIDANCE = True
+
+    ROBOT_RADIUS = 0.0724 / 2
+    RHO_0 = 0.20          # raio de influência entre robôs
+    K_ATT = 1.00          # ganho atrativo
+    K_REP = 0.03          # ganho repulsivo
+    K_ROT = 0.15          # ganho rotacional/tangencial
+    MIN_DISTANCE_EPS = 1e-4
+
+    # distância de segurança centro-centro entre dois robôs
+    R_CLEAR_RR = 2.0 * ROBOT_RADIUS
 
     # Estados
     STATE_PEER_DETECTION = "PEER_DETECTION"
@@ -89,7 +111,9 @@ class RobotFormation:
 
         print("Handles obtidos com sucesso.")
 
+    # =========================
     # Utilidades gerais
+    # =========================
     def _get_required_object(self, path):
         handle = self.sim.getObject(path)
         if handle == -1:
@@ -155,7 +179,95 @@ class RobotFormation:
         y_world = y_ref + dx_local * math.sin(yaw_ref) + dy_local * math.cos(yaw_ref)
         return x_world, y_world
 
+    # =========================
+    # Campo repulsivo + rotacional
+    # entre robôs
+    # =========================
+    def repulsive_rotational_surface(self, px, py, ox, oy, gx, gy, r_clear):
+        """
+        Retorna Fx, Fy e d_surf para um obstáculo circular.
+        Aqui o obstáculo é outro robô.
+        """
+        dx = px - ox
+        dy = py - oy
+        d = math.hypot(dx, dy)
+
+        if d < self.MIN_DISTANCE_EPS:
+            d = self.MIN_DISTANCE_EPS
+
+        # distância até a superfície de segurança
+        d_surf = d - r_clear
+
+        # proteção numérica:
+        # se entrar dentro da zona de segurança, evita explosão
+        d_surf_safe = max(d_surf, self.MIN_DISTANCE_EPS)
+
+        ex = dx / d
+        ey = dy / d
+
+        # vetor obstáculo -> goal
+        ogx = gx - ox
+        ogy = gy - oy
+
+        # decide o lado de contorno
+        cross = ex * ogy - ey * ogx
+        cross_sign = 1.0 if cross >= 0.0 else -1.0
+
+        # fora da influência
+        if d_surf >= self.RHO_0:
+            return 0.0, 0.0, d_surf
+
+        # magnitude base
+        mag = (1.0 / d_surf_safe - 1.0 / self.RHO_0) * (1.0 / (d_surf_safe * d_surf_safe))
+
+        # componente repulsiva
+        mag_rep = self.K_REP * mag
+        fx_rep = mag_rep * ex
+        fy_rep = mag_rep * ey
+
+        # componente tangencial/rotacional
+        mag_rot = self.K_ROT * mag
+        tx = -ey * cross_sign
+        ty = ex * cross_sign
+        fx_rot = mag_rot * tx
+        fy_rot = mag_rot * ty
+
+        return fx_rep + fx_rot, fy_rep + fy_rot, d_surf
+
+    def compute_inter_robot_field(self, robot_key, poses, x_goal, y_goal):
+        """
+        Monta o campo total:
+        - atrativo para o alvo
+        - repulsivo + rotacional dos outros robôs
+        """
+        x, y, _ = poses[robot_key]
+
+        # campo atrativo
+        fx = self.K_ATT * (x_goal - x)
+        fy = self.K_ATT * (y_goal - y)
+
+        if not self.ENABLE_INTER_ROBOT_AVOIDANCE:
+            return fx, fy
+
+        for other_key, other_pose in poses.items():
+            if other_key == robot_key:
+                continue
+
+            ox, oy, _ = other_pose
+            fxi, fyi, _ = self.repulsive_rotational_surface(
+                x, y,
+                ox, oy,
+                x_goal, y_goal,
+                self.R_CLEAR_RR
+            )
+            fx += fxi
+            fy += fyi
+
+        return fx, fy
+
+    # =========================
     # Controle de ponto
+    # =========================
     def controller_to_point(
         self,
         x, y, yaw,
@@ -203,22 +315,51 @@ class RobotFormation:
         position_tol=None
     ):
         x, y, yaw = poses[robot_key]
-        v, w, rho, alpha, arrived = self.controller_to_point(
+
+        if max_linear_speed is None:
+            max_linear_speed = self.MAX_LINEAR_SPEED
+        if max_angular_speed is None:
+            max_angular_speed = self.MAX_ANGULAR_SPEED
+        if position_tol is None:
+            position_tol = self.POSITION_TOL
+
+        # chegada é checada pelo alvo real
+        dx_goal = x_goal - x
+        dy_goal = y_goal - y
+        rho_real = math.hypot(dx_goal, dy_goal)
+
+        if rho_real < position_tol:
+            self.stop_robot(robot_key)
+            alpha_real = self.wrap_to_pi(math.atan2(dy_goal, dx_goal) - yaw) if rho_real > self.MIN_DISTANCE_EPS else 0.0
+            return rho_real, alpha_real, True
+
+        # campo total (atrativo + repulsivo/rotacional)
+        fx, fy = self.compute_inter_robot_field(robot_key, poses, x_goal, y_goal)
+
+        # alvo virtual
+        if math.hypot(fx, fy) < self.MIN_DISTANCE_EPS:
+            x_virtual = x_goal
+            y_virtual = y_goal
+        else:
+            x_virtual = x + fx
+            y_virtual = y + fy
+
+        v, w, _, _, _ = self.controller_to_point(
             x, y, yaw,
-            x_goal, y_goal,
+            x_virtual, y_virtual,
             max_linear_speed=max_linear_speed,
             max_angular_speed=max_angular_speed,
             position_tol=position_tol
         )
 
-        if arrived:
-            self.stop_robot(robot_key)
-        else:
-            self.set_wheel_speeds(robot_key, v, w)
+        self.set_wheel_speeds(robot_key, v, w)
 
-        return rho, alpha, arrived
+        alpha_real = self.wrap_to_pi(math.atan2(dy_goal, dx_goal) - yaw)
+        return rho_real, alpha_real, False
 
+    # =========================
     # Peer detection
+    # =========================
     def is_peer_detected(self, observer_pose, target_pose):
         x_obs, y_obs, yaw_obs = observer_pose
         x_t, y_t, _ = target_pose
@@ -248,9 +389,9 @@ class RobotFormation:
 
         return count
 
-    # Eleição do líder inspirada no artigo
-    # maior número de peers detectados
-    # desempate: menor distância ao goal
+    # =========================
+    # Eleição do líder
+    # =========================
     def elect_leader(self, poses):
         goal_x, goal_y = self.get_goal_position()
 
@@ -261,7 +402,6 @@ class RobotFormation:
             peer_count[key] = self.count_detected_peers(key, poses)
             goal_distance[key] = self.distance_2d(x, y, goal_x, goal_y)
 
-        # maior número de peers; em empate, menor distância ao goal
         self.leader_key = min(
             self.robots.keys(),
             key=lambda k: (-peer_count[k], goal_distance[k])
@@ -286,9 +426,9 @@ class RobotFormation:
         print(f"Seguidor 1: {self.robots[self.follower1_key].name}")
         print(f"Seguidor 2: {self.robots[self.follower2_key].name}\n")
 
+    # =========================
     # Geometria do triângulo
-    # inspirada na lógica do artigo:
-    # seguidores vão para posições relativas ao líder
+    # =========================
     def get_triangle_goals_relative_to_leader(self, poses):
         xL, yL, yawL = poses[self.leader_key]
         d = self.DESIRED_DISTANCE
@@ -308,9 +448,9 @@ class RobotFormation:
 
         return (xF1_goal, yF1_goal), (xF2_goal, yF2_goal)
 
+    # =========================
     # Formação inicial do triângulo
-    # líder fica parado
-    # seguidores vão direto aos vértices relativos
+    # =========================
     def form_triangle(self, poses):
         self.stop_robot(self.leader_key)
 
@@ -345,12 +485,16 @@ class RobotFormation:
             print("\nFormação triangular concluída.")
             print("Iniciando navegação até goal1 mantendo a formação...\n")
 
+    # =========================
     # Navegação mantendo triângulo
+    # =========================
     def navigate_triangle(self, poses):
         goal_x, goal_y = self.get_goal_position()
 
         rhoL, alphaL, arrivedL = self.go_to_point(
-            self.leader_key, goal_x, goal_y, poses,
+            self.leader_key,
+            goal_x, goal_y,
+            poses,
             max_linear_speed=self.LEADER_MAX_LINEAR_SPEED,
             position_tol=self.GOAL_TOL
         )
@@ -389,7 +533,9 @@ class RobotFormation:
             self.state = self.STATE_GOAL_REACHED
             print("\nGoal alcançado com a formação triangular mantida.\n")
 
+    # =========================
     # Debug
+    # =========================
     def debug_form_triangle_status(
         self,
         poses,
@@ -448,7 +594,9 @@ class RobotFormation:
             f"goal=({xF2_goal:.2f}, {yF2_goal:.2f}) rho={rho2:.3f} alpha={alpha2:.3f} arrived={arrived2}"
         )
 
+    # =========================
     # Máquina de estados
+    # =========================
     def step(self):
         poses = self.get_all_poses()
 
