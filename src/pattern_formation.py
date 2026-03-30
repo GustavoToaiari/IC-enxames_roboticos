@@ -66,10 +66,10 @@ class RobotFormation:
     ENABLE_ENV_OBSTACLE_AVOIDANCE_FOR_LEADER = True
 
     ROBOT_RADIUS = 0.0724 / 2
-    RHO_0 = 0.20          # raio de influência entre robôs
-    K_ATT = 1.00          # ganho atrativo
-    K_REP = 0.03          # ganho repulsivo
-    K_ROT = 0.15          # ganho rotacional/tangencial
+    RHO_0 = 0.20
+    K_ATT = 1.00
+    K_REP = 0.03
+    K_ROT = 0.15
     MIN_DISTANCE_EPS = 1e-4
 
     # distância de segurança centro-centro entre dois robôs
@@ -221,37 +221,27 @@ class RobotFormation:
         if d < self.MIN_DISTANCE_EPS:
             d = self.MIN_DISTANCE_EPS
 
-        # distância até a superfície de segurança
         d_surf = d - r_clear
-
-        # proteção numérica:
-        # se entrar dentro da zona de segurança, evita explosão
         d_surf_safe = max(d_surf, self.MIN_DISTANCE_EPS)
 
         ex = dx / d
         ey = dy / d
 
-        # vetor obstáculo -> goal
         ogx = gx - ox
         ogy = gy - oy
 
-        # decide o lado de contorno
         cross = ex * ogy - ey * ogx
         cross_sign = 1.0 if cross >= 0.0 else -1.0
 
-        # fora da influência
         if d_surf >= self.RHO_0:
             return 0.0, 0.0, d_surf
 
-        # magnitude base
         mag = (1.0 / d_surf_safe - 1.0 / self.RHO_0) * (1.0 / (d_surf_safe * d_surf_safe))
 
-        # componente repulsiva
         mag_rep = self.K_REP * mag
         fx_rep = mag_rep * ex
         fy_rep = mag_rep * ey
 
-        # componente tangencial/rotacional
         mag_rot = self.K_ROT * mag
         tx = -ey * cross_sign
         ty = ex * cross_sign
@@ -266,7 +256,6 @@ class RobotFormation:
     def compute_inter_robot_field(self, robot_key, poses, x_goal, y_goal):
         x, y, _ = poses[robot_key]
 
-        # campo atrativo
         fx = self.K_ATT * (x_goal - x)
         fy = self.K_ATT * (y_goal - y)
 
@@ -375,7 +364,6 @@ class RobotFormation:
         if position_tol is None:
             position_tol = self.POSITION_TOL
 
-        # chegada é checada pelo alvo real
         dx_goal = x_goal - x
         dy_goal = y_goal - y
         rho_real = math.hypot(dx_goal, dy_goal)
@@ -385,7 +373,6 @@ class RobotFormation:
             alpha_real = self.wrap_to_pi(math.atan2(dy_goal, dx_goal) - yaw) if rho_real > self.MIN_DISTANCE_EPS else 0.0
             return rho_real, alpha_real, True
 
-        # campo total (atrativo + repulsivo/rotacional)
         fx, fy = self.compute_inter_robot_field(robot_key, poses, x_goal, y_goal)
 
         if use_env_obstacles and self.ENABLE_ENV_OBSTACLE_AVOIDANCE_FOR_LEADER:
