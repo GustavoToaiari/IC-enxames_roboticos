@@ -7,8 +7,6 @@ from coppeliasim_zmqremoteapi_client import RemoteAPIClient
 # Constantes
 WHEEL_RADIUS = 0.0425 / 2
 AXLE_LENGTH  = 0.054
-LEFT_SIGN    = 1
-RIGHT_SIGN   = 1
 
 V_MAX = 0.4
 W_MAX = 2.0
@@ -247,8 +245,8 @@ def main():
             w_cmd = saturate(w_cmd, -W_MAX, W_MAX)
 
             wl, wr = vw_to_wheels(v_cmd, w_cmd, WHEEL_RADIUS, AXLE_LENGTH)
-            wl = saturate(wl, -WHEEL_OMEGA_MAX, WHEEL_OMEGA_MAX) * LEFT_SIGN
-            wr = saturate(wr, -WHEEL_OMEGA_MAX, WHEEL_OMEGA_MAX) * RIGHT_SIGN
+            wl = saturate(wl, -WHEEL_OMEGA_MAX, WHEEL_OMEGA_MAX) 
+            wr = saturate(wr, -WHEEL_OMEGA_MAX, WHEEL_OMEGA_MAX)
 
             sim.setJointTargetVelocity(rob['lm'], wl)
             sim.setJointTargetVelocity(rob['rm'], wr)
