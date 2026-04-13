@@ -1,6 +1,5 @@
 import math
 import numpy as np
-from coppeliasim_zmqremoteapi_client import RemoteAPIClient
 from Parameters import *
 
 class Robot:
@@ -19,8 +18,17 @@ class Robot:
 
 
     def run(self):
-        self.attraction_force()
-        self.set_wheel_speeds()
+        self.get_pose_2d() # Pose do robô é atualizada a cada iteração
+        error = self.goal_position - self.position # Erro entre a posição atual do robô e o goal
+        rho = np.linalg.norm(error) # Retorna a distância euclidiana até o goal
+
+        # Critério de parada (arrived)
+        if rho < GOAL_TOL:
+            self.stop_robot()
+            return True # Chegou ao goal
+        # self.attraction_force()
+        self.set_wheel_speeds(error, rho)
+        return False # Ainda não chegou ao goal
 
     @staticmethod
     def wrap_to_pi(angle):
@@ -33,7 +41,8 @@ class Robot:
 
     def get_pose_2d(self):
         self.position = np.array(self.sim.getObjectPosition(self.base, -1)[:2])
-        self.orientation = self.sim.getObjectOrientation(self.base, -1)[2]
+        self.orientation = self.sim.getObjectOrientation(self.base, -1)[2] + math.pi/2
+        self.orientation = self.wrap_to_pi(self.orientation) # Normaliza o ângulo em [-pi, pi]
     
     @staticmethod
     def get_obstacle_positions(self):
@@ -43,20 +52,26 @@ class Robot:
             obstacles.append((obs["name"], pos[0], pos[1], obs["radius"]))
         return obstacles
     
-    def set_wheel_speeds(self):
-        angle = np.atan2(self.velocity[1], self.velocity[0]) - self.orientation
-        v = self.velocity[0]*np.cos(angle)
-        w = angle * K_ROT
-        # Colocar função para converter velocidade angular em linear
+    def set_wheel_speeds(self, error, rho):
+        dx, dy = error
+
+        angle_desired = math.atan2(dy, dx) # Para onde o robô deveria estar apontando
+        angle = self.wrap_to_pi(angle_desired - self.orientation) # Erro entre a direção desejada e orientação atual
+        # angle = np.atan2(self.velocity[1], self.velocity[0]) - self.orientation
+        # v = self.velocity[0]*np.cos(angle)
+        v = K_V * rho # velocidade linear depende apenas da distância até o goal
+
+        # w = angle * K_ROT
+        w = K_W * angle # velocidade angular depende apenas do erro angular
+
+        # conversão de (v, w) para velocidades das rodas
         wr = (2.0*v + w*AXLE_LENGTH) / (2.0*WHEEL_RADIUS)
         wl = (2.0*v - w*AXLE_LENGTH) / (2.0*WHEEL_RADIUS)
-
-        print(wr)
         
         self.sim.setJointTargetVelocity(self.w_left, float(wl))
         self.sim.setJointTargetVelocity(self.w_right, float(wr))
 
-    def stop_robot(self, robot_key):
+    def stop_robot(self):
         self.sim.setJointTargetVelocity(self.w_left, 0.0)
         self.sim.setJointTargetVelocity(self.w_right, 0.0)
 

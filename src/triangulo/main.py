@@ -8,7 +8,7 @@ client = RemoteAPIClient()
 sim = client.getObject('sim')
 client.setStepping(True)
 
-robot = Robot.Robot(name=sim.getObject('/ePuck'),
+robot = Robot.Robot(name= 'ePuck',
               base=sim.getObject('/base'),
               goal_path=sim.getObject('/Goal'),
               wheel_path=(sim.getObject('/leftJoint'), sim.getObject('/rightJoint')),
@@ -17,15 +17,21 @@ robot = Robot.Robot(name=sim.getObject('/ePuck'),
 if sim.getSimulationState() == sim.simulation_stopped:
         sim.startSimulation()
 
-# Loop simulação
-# start_time = time.time() # Funciona bem no meu computador pessoal | Usa o tempo real
-start_sim = sim.getSimulationTime() # Funciona bem no computador do SIRO | Usa o tempo de simulação
+start_sim = sim.getSimulationTime()
 
 while True:
     client.step()
 
-    robot.run()
+    arrived = robot.run()
 
-    if sim.getSimulationTime() - start_sim > 60: # Funciona bem no computador do SIRO
+    if arrived:
+        robot.stop_robot()
+        print("Robô chegou no goal.")
+        sim.stopSimulation()
+        break
+
+    if sim.getSimulationTime() - start_sim > 60:
+        robot.stop_robot()
         print("Timeout. Encerrando.")
+        sim.stopSimulation()
         break
