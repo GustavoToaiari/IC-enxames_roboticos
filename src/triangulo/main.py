@@ -9,21 +9,13 @@ sim = client.getObject('sim')
 client.setStepping(True)
 
 # Ver formas de melhorar isso, para 3 robôs esta "ok". Mas, quando escalar para mais robôs, ficará inviável essa repetição de Robot.Robot
-robots = [Robot.Robot(name= 'ePuck1',
-              base=sim.getObject('/base1'),
-              goal_path=sim.getObject('/Goal'),
-              wheel_path=(sim.getObject('/leftJoint1'), sim.getObject('/rightJoint1')),
-              sim=sim),
-        Robot.Robot(name= 'ePuck2',
-              base=sim.getObject('/base2'),
-              goal_path=sim.getObject('/Goal'),
-              wheel_path=(sim.getObject('/leftJoint2'), sim.getObject('/rightJoint2')),
-              sim=sim),
-        Robot.Robot(name= 'ePuck3',
-              base=sim.getObject('/base3'),
-              goal_path=sim.getObject('/Goal'),
-              wheel_path=(sim.getObject('/leftJoint3'), sim.getObject('/rightJoint3')),
-              sim=sim)]
+robots = []
+for i in range(1,2):
+    robots.append(Robot.Robot(name= 'ePuck'+f"{i}",
+                base=sim.getObject('/base'+f"{i}"),
+                goal_path=sim.getObject('/Goal'),
+                wheel_path=(sim.getObject('/leftJoint'+f"{i}"), sim.getObject('/rightJoint'+f"{i}")),
+                sim=sim))
 
 if sim.getSimulationState() == sim.simulation_stopped:
         sim.startSimulation()
@@ -35,7 +27,7 @@ while True:
 
     arrived = [] # Guarda se cada robô chegou no goal
     for robot in robots:
-         arrived.append(robot.run())
+         arrived.append(robot.run(robots))
 
     if all(arrived): # Se todos os elementos da lista arrived forem verdadeiros, significa que todos chegaram no Goal
         for robot in robots:
