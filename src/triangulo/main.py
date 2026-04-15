@@ -15,6 +15,7 @@ for i in range(1,2):
                 base=sim.getObject('/base'+f"{i}"),
                 goal_path=sim.getObject('/Goal'),
                 wheel_path=(sim.getObject('/leftJoint'+f"{i}"), sim.getObject('/rightJoint'+f"{i}")),
+                obstacles=[sim.getObject('/Cylinder1')],
                 sim=sim))
 
 if sim.getSimulationState() == sim.simulation_stopped:

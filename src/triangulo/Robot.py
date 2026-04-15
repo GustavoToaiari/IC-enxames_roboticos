@@ -2,7 +2,7 @@ import numpy as np
 from Parameters import *
 
 class Robot:
-    def __init__(self, name, base, goal_path, wheel_path, sim):
+    def __init__(self, name, base, goal_path, wheel_path, obstacles, sim):
         self.name = name
         self.base = base
         self.w_left, self.w_right = wheel_path
@@ -13,7 +13,7 @@ class Robot:
         self.orientation = 0
         self.sim = sim
         self.goal_path = goal_path
-        # self.obstacle = obstacle
+        self.obstacles = obstacles
         self.goal_position = np.array(self.sim.getObjectPosition(self.goal_path, -1)[:2])
 
 
@@ -25,8 +25,10 @@ class Robot:
             return True
 
         self.attraction_force()
-        self.velocity = self.force
+        self.repulsive_force()
         self.set_wheel_speeds()
+
+        self.force = 0
         
         return False # Ainda não chegou ao goal
 
@@ -51,22 +53,20 @@ class Robot:
         orientation = self.sim.getObjectOrientation(self.base, -1)[2] + np.pi/2
         self.orientation = self.wrap_to_pi(orientation) # Normaliza o ângulo em [-pi, pi]
     
-    @staticmethod
+
     def get_obstacle_positions(self):
         obstacles = []
-        for obs in self.obstacles:
-            pos = self.sim.getObjectPosition(obs["handle"], -1)
-            obstacles.append((obs["name"], pos[0], pos[1], obs["radius"]))
+        for i, obs in enumerate(self.obstacles):
+            pos = self.sim.getObjectPosition(obs, -1)
+            obstacles.append(np.array([pos[0], pos[1]]))
         return obstacles
     
     def set_wheel_speeds(self):
-        rho_v = self.goal_position - self.position # Erro entre a posição atual do robô e o goal
-        rho = np.linalg.norm(rho_v)
-        dx, dy = rho_v
 
-        angle_desired = np.atan2(dy, dx) # Para onde o robô deveria estar apontando
+        angle_desired = np.atan2(self.force[1], self.force[0]) # Para onde o robô deveria estar apontando
         angle = self.wrap_to_pi(angle_desired - self.orientation) # Erro entre a direção desejada e orientação atual
-        v = K_V * rho # velocidade linear depende apenas da distância até o goal
+
+        v = K_V * np.linalg.norm(self.force) # velocidade linear depende apenas da distância até o goal
         v = max(min(v, V_MAX), 0.1*V_MAX) 
 
         w = K_W * angle # velocidade angular depende apenas do erro angular
@@ -87,7 +87,28 @@ class Robot:
         self.sim.setJointTargetVelocity(self.w_right, 0.0)
 
     def attraction_force(self):
-        self.force += (self.goal_position - self.position) * K_ATT
+        self.force = self.force + (self.goal_position - self.position) * K_ATT
+
+    def repulsive_force(self):
+        obstacles = self.get_obstacle_positions()
+        obs_rad = 0.25
+        F_rep = np.zeros_like(self.force)
+
+        for obs in obstacles:
+            dir = self.position - obs
+            dist = np.linalg.norm(dir) - obs_rad - ROBOT_RADIUS
+            if dist < REP_RANGE:
+                F_rep = F_rep + (
+                    (K_REP / (dist ** 2)) *
+                    ((1 / dist) - (1 / REP_RANGE)) *
+                    (dir / REP_RANGE)
+                )
+            else:
+                F_rep = F_rep + np.zeros_like(self.force)
+
+        self.force = self.force + F_rep
+
+
 
     
     # função apenas para formação triangulo

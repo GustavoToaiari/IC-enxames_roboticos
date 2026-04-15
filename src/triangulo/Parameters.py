@@ -12,10 +12,10 @@ ROBOT_RADIUS = 0.0724/2
 OBSTACLE_RADIUS = 0.25
 
 # Ganhos do campo
-K_ATT = 0.2
-K_REP = 10.0
-RHO_0 = 0.5
+K_ATT = 1
+K_REP = 0.08
 K_ROT = 50.0
+REP_RANGE = 0.4
 
 # Mapeamento força -> (v,w)
 K_V = 0.2
