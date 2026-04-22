@@ -130,7 +130,6 @@ def main():
 
     # Obstáculos
     obstacle_handles = [
-        sim.getObject('/80cmHighPillar25cm0'),
         sim.getObject('/80cmHighPillar25cm1'),
         sim.getObject('/80cmHighPillar25cm2'),
         sim.getObject('/80cmHighPillar25cm3'),
@@ -144,6 +143,7 @@ def main():
         sim.getObject('/80cmHighPillar25cm11'),
         sim.getObject('/80cmHighPillar25cm12'),
         sim.getObject('/80cmHighPillar25cm13'),
+        sim.getObject('/80cmHighPillar25cm14'),
     ]
 
     obstacles_xy = []

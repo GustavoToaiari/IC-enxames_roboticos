@@ -12,19 +12,14 @@ ROBOT_RADIUS = 0.0724/2
 OBSTACLE_RADIUS = 0.25
 
 # Ganhos do campo
-K_ATT = 1
+K_ATT = 10
 K_REP = 0.35 # Antes: 0.08
 K_ROT = 50.0
 REP_RANGE = 0.4
 
 # Mapeamento força -> (v,w)
-K_V = 0.2
+K_V = 1.2
 K_W = 3.5 # Antes: 1.0
 
 # Repulsão entre robôs
 K_REP_ROBOTS = 0.35
-
-# Formação triangular
-DESIRED_DISTANCE = 0.50   # distância desejada entre cada par de robôs
-DIST_TOL = 0.05          # tolerância da formação
-K_FORM = 1.2             # ganho da força de formação

@@ -8,14 +8,20 @@ client = RemoteAPIClient()
 sim = client.getObject('sim')
 client.setStepping(True)
 
+obstacles_handles = []
+for i in range(1,15):
+    obstacles_handles.append(sim.getObject('/80cmHighPillar25cm'+f"{i}"))
+
 robots = []
-for i in range(1,2):
+for i in range(1,11):
     robots.append(Robot.Robot(name= 'ePuck'+f"{i}",
                 base=sim.getObject('/base'+f"{i}"),
                 goal_path=sim.getObject('/Goal'),
                 wheel_path=(sim.getObject('/leftJoint'+f"{i}"), sim.getObject('/rightJoint'+f"{i}")),
-                obstacles=[sim.getObject('/Cylinder1')],
-                sim=sim))
+                obstacles= obstacles_handles,
+                sim=sim
+                )
+            )
 
 if sim.getSimulationState() == sim.simulation_stopped:
         sim.startSimulation()
@@ -42,4 +48,3 @@ while True:
         print("Timeout. Encerrando.")
         sim.stopSimulation()
         break
-    
