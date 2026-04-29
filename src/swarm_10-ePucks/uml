@@ -1,0 +1,67 @@
+@startuml
+
+class Parameters {
+  +WHEEL_RADIUS
+  +AXLE_LENGTH
+  +V_MAX
+  +W_MAX
+  +GOAL_TOL
+  +ROBOT_RADIUS
+  +OBSTACLE_RADIUS
+  +K_ATT
+  +K_REP
+  +K_ROT
+  +REP_RANGE
+  +K_V
+  +K_W
+  +K_REP_ROBOTS
+}
+
+class Robot {
+  -name
+  -base
+  -w_left
+  -w_right
+  -velocity
+  -force
+  -ang_vel
+  -position
+  -orientation
+  -sim
+  -goal_path
+  -obstacles
+  -goal_position
+
+  +__init__(name, base, goal_path, wheel_path, obstacles, sim)
+  +run(robots=None)
+  +wrap_to_pi(angle)
+  +arrived()
+  +get_pose_2d()
+  +get_obstacle_positions()
+  +set_wheel_speeds()
+  +stop_robot()
+  +attraction_force()
+  +repulsive_force()
+  +repulsive_r2r(robots)
+}
+
+class Main {
+  +client
+  +sim
+  +obstacles_handles
+  +robots
+  +start_sim
+  +loop_simulation()
+}
+
+class RemoteAPIClient
+class CoppeliaSim
+
+Main --> Robot : cria vários objetos
+Main --> RemoteAPIClient : conecta
+RemoteAPIClient --> CoppeliaSim : acessa simulação
+Robot --> CoppeliaSim : controla robôs e lê pose
+Robot ..> Parameters : usa constantes
+Robot --> Robot : calcula repulsão entre robôs
+
+@enduml

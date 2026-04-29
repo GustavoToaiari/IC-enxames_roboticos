@@ -149,10 +149,6 @@ class Robot:
             delta = other.position - self.position
             dist = np.linalg.norm(delta)
 
-            # Evita divisão por zero
-            if dist < 1e-6:
-                continue
-
             # Erro de distância:
             # > 0  -> longe demais -> aproxima
             # < 0  -> perto demais -> afasta
@@ -165,30 +161,28 @@ class Robot:
             direction = delta / dist
 
             # Soma contribuição de formação
-            force += K_FORM * dist_error * direction
+            force += dist_error * direction
 
         self.force = force
         self.max_error = max_error
 
-    def create_epucks_from_template(sim, n_robots):
+    def create_epucks(sim, n_robots):
         robots = []
-        epuck_template = sim.getObject('/ePuck1')  # Agora sim é passado como argumento
+        epuck_template = sim.getObject('/ePuck1')
 
-        # Definindo os limites para as posições aleatórias
-        x_min, x_max = -2.0, 2.0  # Limite de X
-        y_min, y_max = -2.0, 2.0  # Limite de Y
+        x_min, x_max = -2.0, 2.0  # Limites de X
+        y_min, y_max = -2.0, 2.0  # Limites de Y
 
         for i in range(2, n_robots):  # Correção para incluir o último robô
             copied = sim.copyPasteObjects([epuck_template], 1)
             new_model = copied[0]
 
-            # Muda o alias para não ter problemas com duplicatas de nomes
             sim.setObjectAlias(new_model, f'ePuck{i}')
 
             # Gerando posições aleatórias dentro dos limites definidos
             x_pos = random.uniform(x_min, x_max)  # Posição aleatória no eixo X
             y_pos = random.uniform(y_min, y_max)  # Posição aleatória no eixo Y
-            z_pos = 0.01915  # Você pode ajustar a altura se necessário
+            z_pos = 0.01915
 
             # Definindo a nova posição do robô
             sim.setObjectPosition(new_model, sim.handle_world, [x_pos, y_pos, z_pos])

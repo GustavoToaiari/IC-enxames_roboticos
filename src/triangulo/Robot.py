@@ -163,6 +163,6 @@ class Robot:
     #         direction = delta / dist
 
     #         # Soma contribuição de formação
-    #         force += K_FORM * dist_error * direction
+    #         force += dist_error * direction
 
     #     return force, max_error

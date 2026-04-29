@@ -6,9 +6,9 @@ client = RemoteAPIClient()
 sim = client.getObject('sim')
 client.setStepping(True)
 
-robots = Robot.Robot.create_epucks_from_template(sim, 7) # Vai criar 5 robos, pois o ePuck1 ja esta na cena
-
-for i in range(1,7): # Vai percorrer 6 robos
+# robots = Robot.Robot.create_epucks_from_template(sim, 7) # Vai criar 5 robos, pois o ePuck1 ja esta na cena
+robots = []
+for i in range(1,11): # Vai percorrer 10 robos
     robots.append(Robot.Robot(name= 'ePuck'+f"{i}",
                 base=sim.getObject('/ePuck'+f"{i}"+'/base'),
                 goal_path=sim.getObject('/Goal'),
@@ -28,7 +28,7 @@ while True:
     for robot in robots:
         arrived.append(robot.run(robots))
 
-    if robot.max_error < 0.05: # Verificar se esse 0.05 esta bugando algo (parece que esta fazendo formar linha as vezes)
+    if robot.max_error < 0.04: # Verificar se esse 0.05 esta bugando algo (parece que esta fazendo uma formação diferente dependendo de onde os robôs estão inicialmente)
         for robot in robots:
             robot.stop_robot()
 
@@ -39,7 +39,7 @@ while True:
         sim.stopSimulation()
         break
 
-    if sim.getSimulationTime() - start_sim > 10: # Critério de segurança, encerra se passar de 60 segundos de simulação
+    if sim.getSimulationTime() - start_sim > 60: # Critério de segurança, encerra se passar de 60 segundos de simulação
         for robot in robots:
             robot.stop_robot()
         print("Timeout. Encerrando.")

@@ -27,4 +27,3 @@ K_REP_ROBOTS = 0.35
 # Formação triangular
 DESIRED_DISTANCE = 0.50   # distância desejada entre cada par de robôs
 DIST_TOL = 0.05          # tolerância da formação
-K_FORM = 1.2             # ganho da força de formação
