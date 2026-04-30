@@ -48,6 +48,7 @@ class Robot:
         if rho < GOAL_TOL:
             self.stop_robot()
             return True # Chegou ao goal
+        return False
     
 
     def get_pose_2d(self):
@@ -167,13 +168,13 @@ class Robot:
         self.max_error = max_error
 
     def create_epucks(sim, n_robots):
-        robots = []
+        created_epucks = []
         epuck_template = sim.getObject('/ePuck1')
 
         x_min, x_max = -2.0, 2.0  # Limites de X
         y_min, y_max = -2.0, 2.0  # Limites de Y
 
-        for i in range(2, n_robots):  # Correção para incluir o último robô
+        for i in range(2, n_robots+1):  # Correção para incluir o último robô
             copied = sim.copyPasteObjects([epuck_template], 1)
             new_model = copied[0]
 
@@ -186,6 +187,12 @@ class Robot:
 
             # Definindo a nova posição do robô
             sim.setObjectPosition(new_model, sim.handle_world, [x_pos, y_pos, z_pos])
+
+            created_epucks.append(new_model)
             
 
-        return robots
+        return created_epucks
+    
+    def remove_created_epucks(sim, created_epucks):
+        for epuck in created_epucks:
+            sim.removeModel(epuck)
