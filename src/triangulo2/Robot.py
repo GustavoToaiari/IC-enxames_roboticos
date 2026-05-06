@@ -18,9 +18,25 @@ class Robot:
         self.goal_position = np.array(self.sim.getObjectPosition(self.goal_path, -1)[:2])
 
 
-    def run(self, robots=None): 
+    def run(self, robots=None, mode="formation"): 
         self.get_pose_2d() # Pose do robô é atualizada a cada iteração
         
+        if mode == "formation":
+            self.formation_force(robots)
+            self.set_wheel_speeds(V_MAX_FORMATION)
+            return False
+        
+        elif mode == "go_to_goal":
+            if self.arrived():
+                return True
+            
+            self.attraction_force()
+            self.set_wheel_speeds(V_MAX_LEADER_GOAL)
+
+        elif mode == "stop":
+            self.stop_robot()
+            return False
+
         # if self.arrived():
         #     self.stop_robot() 
         #     return True
@@ -28,8 +44,7 @@ class Robot:
         #self.attraction_force()
         #self.repulsive_force()
         #self.repulsive_r2r(robots)
-        self.formation_force(robots)
-        self.set_wheel_speeds()
+        #self.set_wheel_speeds()
 
         self.force = 0
         
@@ -65,7 +80,7 @@ class Robot:
             obstacles.append(np.array([pos[0], pos[1]]))
         return obstacles
     
-    def set_wheel_speeds(self):
+    def set_wheel_speeds(self, V_MAX):
 
         angle_desired = np.atan2(self.force[1], self.force[0]) # Para onde o robô deveria estar apontando
         angle = self.wrap_to_pi(angle_desired - self.orientation) # Erro entre a direção desejada e orientação atual

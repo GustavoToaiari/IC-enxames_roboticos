@@ -19,11 +19,14 @@ REP_RANGE = 0.4
 
 # Mapeamento força -> (v,w)
 K_V = 0.2
-K_W = 3.5 # Antes: 1.0
+K_W = 3.5*6 # Para 3 robôs: *6;
 
 # Repulsão entre robôs
 K_REP_ROBOTS = 0.35
 
 # Formação triangular
 DESIRED_DISTANCE = 0.50   # distância desejada entre cada par de robôs
-DIST_TOL = 0.05          # tolerância da formação
+DIST_TOL = 0.3          # tolerância da formação
+V_MAX_FORMATION = 0.13*4 # Para 3 robôs: *4;
+
+V_MAX_LEADER_GOAL = 0.05
