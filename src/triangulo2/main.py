@@ -8,12 +8,13 @@ client = RemoteAPIClient()
 sim = client.getObject('sim')
 client.setStepping(True)
 
-created_epucks = Robot.Robot.create_epucks(sim, 4) # Vai criar 3 robos, pois o ePuck1 ja esta na cena
+created_epucks = Robot.Robot.create_epucks(sim, 3) # Vai criar 3 robos, pois o ePuck1 ja esta na cena
 robots = []
-for i in range(1, 5): # Vai percorrer 4 robos
+for i in range(1, 4): # Vai percorrer 4 robos
     robots.append(Robot.Robot(name= 'ePuck'+f"{i}",
                 base=sim.getObject('/ePuck'+f"{i}"+'/base'),
-                goal_path=sim.getObject('/Goal'),
+                goal_path=sim.getObject('/Goal1'),
+                goal2_path=sim.getObject('/Goal2'),
                 wheel_path=(sim.getObject('/ePuck'+f"{i}"+'/leftJoint'), sim.getObject('/ePuck'+f"{i}"+'/rightJoint')),
                 obstacles=[sim.getObject('/Cylinder1')],
                 sim=sim))
@@ -56,6 +57,25 @@ try:
                     arrived.append(False)
             
             if leader.arrived():
+                for robot in robots:
+                    robot.stop_robot()
+
+                leader = min(robots, key=lambda r: np.linalg.norm(r.goal2_position - r.position))
+                leader.goal_position = leader.goal2_position
+                state = "GO_TO_GOAL2"
+
+        elif state == "GO_TO_GOAL2":
+            arrived2 = []
+            
+            for robot in robots:
+                if robot is leader:
+                    arrived2.append(robot.run(robots, mode="go_to_goal2"))
+                
+                else:
+                    robot.run(robots, mode="formation")
+                    arrived2.append(False)
+            
+            if leader.arrived2():
                 for robot in robots:
                     robot.stop_robot()
                 

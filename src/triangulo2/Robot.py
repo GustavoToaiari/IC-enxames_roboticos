@@ -3,7 +3,7 @@ import random
 from Parameters import *
 
 class Robot:
-    def __init__(self, name, base, goal_path, wheel_path, obstacles, sim):
+    def __init__(self, name, base, goal_path, goal2_path, wheel_path, obstacles, sim):
         self.name = name
         self.base = base
         self.w_left, self.w_right = wheel_path
@@ -14,8 +14,10 @@ class Robot:
         self.orientation = 0
         self.sim = sim
         self.goal_path = goal_path
+        self.goal2_path = goal2_path
         self.obstacles = obstacles
         self.goal_position = np.array(self.sim.getObjectPosition(self.goal_path, -1)[:2])
+        self.goal2_position = np.array(self.sim.getObjectPosition(self.goal2_path, -1)[:2])
 
 
     def run(self, robots=None, mode="formation"): 
@@ -28,6 +30,13 @@ class Robot:
         
         elif mode == "go_to_goal":
             if self.arrived():
+                return True
+            
+            self.attraction_force()
+            self.set_wheel_speeds(V_MAX_LEADER_GOAL)
+
+        elif mode == "go_to_goal2":
+            if self.arrived2():
                 return True
             
             self.attraction_force()
@@ -60,6 +69,13 @@ class Robot:
     
     def arrived(self):
         rho = np.linalg.norm(self.goal_position - self.position)
+        if rho < GOAL_TOL:
+            self.stop_robot()
+            return True # Chegou ao goal
+        return False
+    
+    def arrived2(self):
+        rho = np.linalg.norm(self.goal2_position - self.position)
         if rho < GOAL_TOL:
             self.stop_robot()
             return True # Chegou ao goal
