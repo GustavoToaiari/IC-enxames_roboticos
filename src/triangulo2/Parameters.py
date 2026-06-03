@@ -30,3 +30,8 @@ DIST_TOL = 0.05          # tolerância da formação
 V_MAX_FORMATION = 0.13*4 # Para 3 robôs: *4;
 
 V_MAX_LEADER_GOAL = 0.05
+
+# Formação em linha
+LINE_DISTANCE = 0.45
+LINE_TOL = 0.05
+K_LINE = 1.5

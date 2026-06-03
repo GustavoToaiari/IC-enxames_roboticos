@@ -3,6 +3,7 @@ from coppeliasim_zmqremoteapi_client import RemoteAPIClient
 import Robot
 import Parameters
 import numpy as np
+import time
 
 client = RemoteAPIClient()
 sim = client.getObject('sim')
@@ -24,9 +25,14 @@ if sim.getSimulationState() == sim.simulation_stopped:
 
 start_sim = sim.getSimulationTime()
 state = "FORM_TRIANGLE"
+leader = None
+line_order = None
 try:
     while True:
         client.step()
+
+        for robot in robots:
+            robot.get_pose_2d()
 
         if state == "FORM_TRIANGLE":
             max_errors = []
@@ -41,39 +47,69 @@ try:
                 for robot in robots:
                     robot.stop_robot()
 
+                time.sleep(1)
+
+                # Escolhe o robô mais próximo do Goal1 como líder
                 leader = min(robots, key=lambda r: np.linalg.norm(r.goal_position - r.position)) # Recebe robô e retorna o robô que tem a menor distância até o goal
 
                 state = "GO_TO_GOAL"
 
         elif state == "GO_TO_GOAL":
-            arrived = []
 
             for robot in robots:
                 if robot is leader:
-                    arrived.append(robot.run(robots, mode="go_to_goal"))
+                    robot.run(robots, mode="go_to_goal")
                 
                 else:
                     robot.run(robots, mode="formation")
-                    arrived.append(False)
             
             if leader.arrived():
                 for robot in robots:
                     robot.stop_robot()
 
-                leader = min(robots, key=lambda r: np.linalg.norm(r.goal2_position - r.position))
-                leader.goal_position = leader.goal2_position
-                state = "GO_TO_GOAL2"
+                time.sleep(1)
 
-        elif state == "GO_TO_GOAL2":
-            arrived2 = []
-            
+                # Ordena os robôs pela distância até o Goal2
+                # O mais proximo do Goal2 fica na frente da fila
+                line_order = sorted(robots, key=lambda r: np.linalg.norm(r.goal2_position - r.position))
+
+                # O lider para o Goal2 é o primeiro da fila
+                leader = line_order[0]
+
+                # Informa a todos o todos quem é o lider e a ordem da linha
+                for robot in robots:
+                    robot.leader = leader
+                    robot.line_order = line_order
+                
+                state = "FORM_LINE"
+        
+        elif state == "FORM_LINE":
+            max_errors = []
+
             for robot in robots:
                 if robot is leader:
-                    arrived2.append(robot.run(robots, mode="go_to_goal2"))
-                
+                    robot.stop_robot()
+                    robot.max_error = 0
                 else:
-                    robot.run(robots, mode="formation")
-                    arrived2.append(False)
+                    robot.run(robots, mode="line_formation")
+                
+                max_errors.append(robot.max_error)
+            
+            global_line_error = max(max_errors)
+
+            if global_line_error < Parameters.LINE_TOL:
+                for robot in robots:
+                    robot.stop_robot()
+
+                time.sleep(1)
+                state = "GO_TO_GOAL2"
+
+        elif state == "GO_TO_GOAL2":            
+            for robot in robots:
+                if robot is leader:
+                    robot.run(robots, mode="go_to_goal2")
+                else:
+                    robot.run(robots, mode="line_formation")
             
             if leader.arrived2():
                 for robot in robots:

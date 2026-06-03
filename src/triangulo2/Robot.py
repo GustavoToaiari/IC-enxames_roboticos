@@ -19,6 +19,9 @@ class Robot:
         self.goal_position = np.array(self.sim.getObjectPosition(self.goal_path, -1)[:2])
         self.goal2_position = np.array(self.sim.getObjectPosition(self.goal2_path, -1)[:2])
 
+        self.leader = None
+        self.line_order = None
+
 
     def run(self, robots=None, mode="formation"): 
         self.get_pose_2d() # Pose do robô é atualizada a cada iteração
@@ -28,18 +31,23 @@ class Robot:
             self.set_wheel_speeds(V_MAX_FORMATION)
             return False
         
+        elif mode == "line_formation":
+            self.line_formation_force()
+            self.set_wheel_speeds(V_MAX_FORMATION)
+            return False
+        
         elif mode == "go_to_goal":
             if self.arrived():
                 return True
             
-            self.attraction_force()
+            self.attraction_force(self.goal_position)
             self.set_wheel_speeds(V_MAX_LEADER_GOAL)
 
         elif mode == "go_to_goal2":
             if self.arrived2():
                 return True
             
-            self.attraction_force()
+            self.attraction_force(self.goal2_position)
             self.set_wheel_speeds(V_MAX_LEADER_GOAL)
 
         elif mode == "stop":
@@ -91,7 +99,7 @@ class Robot:
 
     def get_obstacle_positions(self):
         obstacles = []
-        for i, obs in enumerate(self.obstacles):
+        for obs in self.obstacles:
             pos = self.sim.getObjectPosition(obs, -1)
             obstacles.append(np.array([pos[0], pos[1]]))
         return obstacles
@@ -121,8 +129,8 @@ class Robot:
         self.sim.setJointTargetVelocity(self.w_left, 0.0)
         self.sim.setJointTargetVelocity(self.w_right, 0.0)
 
-    def attraction_force(self):
-        self.force = self.force + (self.goal_position - self.position) * K_ATT
+    def attraction_force(self, target_position):
+        self.force = self.force + (target_position - self.position) * K_ATT
 
     def repulsive_force(self):
         obstacles = self.get_obstacle_positions()
@@ -198,6 +206,37 @@ class Robot:
         self.force = force
         self.max_error = max_error
 
+    def line_formation_force(self):
+        if self.line_order is None or self.leader is None:
+            self.force = np.array([0,0])
+            self.max_error = 0
+            return
+        
+        index = self.line_order.index(self)
+
+        if index == 0: # Se é o lider
+            self.force = np.array([0,0])
+            self.max_error = 0
+            return
+        
+        front_robot = self.line_order[index-1]
+
+        self.get_pose_2d()
+        front_robot.get_pose_2d()
+        self.leader.get_pose_2d()
+
+        # Direção do líde até o Goal2
+        direction = self.leader.goal2_position - self.leader.position
+        direction = direction / np.linalg.norm(direction)
+
+        # Posição desejada: atrás do robô da frente, considerando a direção do movimento até o Goal2
+        desired_position = front_robot.position - LINE_DISTANCE * direction
+
+        error_vector = desired_position - self.position
+        self.max_error = np.linalg.norm(error_vector)
+        self.force = K_LINE * error_vector
+
+    @staticmethod
     def create_epucks(sim, n_robots):
         created_epucks = []
         epuck_template = sim.getObject('/ePuck1')
@@ -224,6 +263,7 @@ class Robot:
 
         return created_epucks
     
+    @staticmethod
     def remove_created_epucks(sim, created_epucks):
         for epuck in created_epucks:
             sim.removeModel(epuck)
