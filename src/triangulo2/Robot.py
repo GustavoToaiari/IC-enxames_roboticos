@@ -3,7 +3,7 @@ import random
 from Parameters import *
 
 class Robot:
-    def __init__(self, name, base, goal_path, goal2_path, wheel_path, obstacles, sim):
+    def __init__(self, name, base, goal_paths, wheel_path, obstacles, sim):
         self.name = name
         self.base = base
         self.w_left, self.w_right = wheel_path
@@ -13,17 +13,19 @@ class Robot:
         self.position = np.array([0, 0])
         self.orientation = 0
         self.sim = sim
-        self.goal_path = goal_path
-        self.goal2_path = goal2_path
+        
+        self.goal_paths = goal_paths
+        self.goal_positions = [np.array(self.sim.getObjectPosition(goal, -1)[:2])
+                               for goal in self.goal_paths]
+
         self.obstacles = obstacles
-        self.goal_position = np.array(self.sim.getObjectPosition(self.goal_path, -1)[:2])
-        self.goal2_position = np.array(self.sim.getObjectPosition(self.goal2_path, -1)[:2])
 
         self.leader = None
         self.line_order = None
+        self.line_target_position = None
 
 
-    def run(self, robots=None, mode="formation"): 
+    def run(self, robots=None, mode="formation", target_position=None): 
         self.get_pose_2d() # Pose do robô é atualizada a cada iteração
         
         if mode == "formation":
@@ -37,31 +39,20 @@ class Robot:
             return False
         
         elif mode == "go_to_goal":
-            if self.arrived():
-                return True
+            if target_position is None:
+                self.stop_robot()
+                return False
             
-            self.attraction_force(self.goal_position)
-            self.set_wheel_speeds(V_MAX_LEADER_GOAL)
-
-        elif mode == "go_to_goal2":
-            if self.arrived2():
-                return True
+            if self.arrived_target(target_position):
+                return False
             
-            self.attraction_force(self.goal2_position)
+            self.force - np.array([0.0,0.0])
+            self.attraction_force(target_position)
             self.set_wheel_speeds(V_MAX_LEADER_GOAL)
 
         elif mode == "stop":
             self.stop_robot()
             return False
-
-        # if self.arrived():
-        #     self.stop_robot() 
-        #     return True
-
-        #self.attraction_force()
-        #self.repulsive_force()
-        #self.repulsive_r2r(robots)
-        #self.set_wheel_speeds()
 
         self.force = 0
         
@@ -75,18 +66,13 @@ class Robot:
             angle += 2.0 * np.pi
         return angle
     
-    def arrived(self):
-        rho = np.linalg.norm(self.goal_position - self.position)
+    def arrived_target(self, target_position):
+        rho = np.linalg.norm(target_position - self.position)
+
         if rho < GOAL_TOL:
             self.stop_robot()
-            return True # Chegou ao goal
-        return False
-    
-    def arrived2(self):
-        rho = np.linalg.norm(self.goal2_position - self.position)
-        if rho < GOAL_TOL:
-            self.stop_robot()
-            return True # Chegou ao goal
+            return True
+        
         return False
     
 
@@ -207,32 +193,48 @@ class Robot:
         self.max_error = max_error
 
     def line_formation_force(self):
-        if self.line_order is None or self.leader is None:
-            self.force = np.array([0,0])
-            self.max_error = 0
+        if (
+            self.line_order is None
+            or self.leader is None
+            or self.line_target_position is None
+        ):
+            self.force = np.array([0.0, 0.0])
+            self.max_error = 0.0
             return
-        
+
         index = self.line_order.index(self)
 
-        if index == 0: # Se é o lider
-            self.force = np.array([0,0])
-            self.max_error = 0
+        # O primeiro robô da lista é o líder
+        if index == 0:
+            self.force = np.array([0.0, 0.0])
+            self.max_error = 0.0
             return
-        
-        front_robot = self.line_order[index-1]
+
+        front_robot = self.line_order[index - 1]
 
         self.get_pose_2d()
         front_robot.get_pose_2d()
         self.leader.get_pose_2d()
 
-        # Direção do líde até o Goal2
-        direction = self.leader.goal2_position - self.leader.position
-        direction = direction / np.linalg.norm(direction)
+        # Direção do líder até o objetivo atual
+        direction = self.line_target_position - self.leader.position
+        direction_norm = np.linalg.norm(direction)
 
-        # Posição desejada: atrás do robô da frente, considerando a direção do movimento até o Goal2
-        desired_position = front_robot.position - LINE_DISTANCE * direction
+        if direction_norm < 1e-6:
+            self.force = np.array([0.0, 0.0])
+            self.max_error = 0.0
+            return
+
+        direction = direction / direction_norm
+
+        # Posição desejada atrás do robô da frente
+        desired_position = (
+            front_robot.position
+            - LINE_DISTANCE * direction
+        )
 
         error_vector = desired_position - self.position
+
         self.max_error = np.linalg.norm(error_vector)
         self.force = K_LINE * error_vector
 
@@ -241,8 +243,8 @@ class Robot:
         created_epucks = []
         epuck_template = sim.getObject('/ePuck1')
 
-        x_min, x_max = -2.0, 2.0  # Limites de X
-        y_min, y_max = -2.0, 2.0  # Limites de Y
+        x_min, x_max = 1.0, 2.3  # Limites de X
+        y_min, y_max = -1.0, -2.3  # Limites de Y
 
         for i in range(2, n_robots+1):  # Correção para incluir o último robô
             copied = sim.copyPasteObjects([epuck_template], 1)
@@ -263,6 +265,26 @@ class Robot:
 
         return created_epucks
     
+
+    def detect_narrow_passage(self, robots):
+        """
+        Detecta passagem estreita à frente do líder.
+        Se a largura disponível for menor que 0.3 m, retorna True.
+        """
+        # largura mínima fixa da passagem
+        MIN_PASSAGE_WIDTH = 0.6  # metros
+
+        # Verifica a distância até os obstáculos à frente do líder
+        obstacles = self.get_obstacle_positions()
+
+        for obs in obstacles:
+            vec_to_obs = obs - self.position
+            dist = np.linalg.norm(vec_to_obs)  # distância do centro do líder até o obstáculo
+            if dist < MIN_PASSAGE_WIDTH:
+                return True  # passa a ser considerado estreito
+
+        return False
+
     @staticmethod
     def remove_created_epucks(sim, created_epucks):
         for epuck in created_epucks:
