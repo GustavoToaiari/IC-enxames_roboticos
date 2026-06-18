@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 from coppeliasim_zmqremoteapi_client import RemoteAPIClient
-import Robot
+from Robot import Robot
 import Parameters
 import numpy as np
 import time
@@ -9,7 +9,7 @@ client = RemoteAPIClient()
 sim = client.getObject('sim')
 client.setStepping(True)
 
-created_epucks = Robot.Robot.create_epucks(sim, 3) # Vai criar 3 robos, pois o ePuck1 ja esta na cena
+created_epucks = Robot.create_epucks(sim, 3) # Vai criar 3 robos, pois o ePuck1 ja esta na cena
 
 goal_paths = [
     sim.getObject('/Goal1'),
@@ -26,7 +26,7 @@ obstacles = [
 
 robots = []
 for i in range(1, 4): # Vai percorrer 4 robos
-    robots.append(Robot.Robot(name= 'ePuck'+f"{i}",
+    robots.append(Robot(name= 'ePuck'+f"{i}",
                 base=sim.getObject('/ePuck'+f"{i}"+'/base'),
                 goal_paths=goal_paths,
                 wheel_path=(sim.getObject('/ePuck'+f"{i}"+'/leftJoint'), sim.getObject('/ePuck'+f"{i}"+'/rightJoint')),
@@ -46,55 +46,7 @@ line_order = None
 # 1 = Goal1
 # 2 = Goal2
 # 3 = Goal2
-current_goal_index = 1
-
-
-def get_current_goal_name():
-    return f"Goal{current_goal_index + 1}"
-
-def get_current_target():
-    return robots[0].goal_positions[current_goal_index]
-
-
-def leader_arrived():
-    return leader.arrived_target(get_current_target())
-
-
-def run_leader_to_current_goal():
-    leader.run(robots, mode="go_to_goal", target_position=get_current_target())
-
-def clear_line_data():
-    for robot in robots:
-        robot.leader = None
-        robot.line_order = None
-        robot.line_target_position = None
-
-def choose_leader_by_current_goal():
-    global leader
-
-    target = get_current_target()
-
-    leader = min(robots, key=lambda r: np.linalg.norm(target -r.position))
-
-
-def prepare_line_formation():
-    global leader
-    global line_order
-
-    target = get_current_target()
-
-    # O robô mais próximo do objetivo atual fica na frente
-    line_order = sorted(
-        robots,
-        key=lambda r: np.linalg.norm(target - r.position)
-    )
-
-    leader = line_order[0]
-
-    for robot in robots:
-        robot.leader = leader
-        robot.line_order = line_order
-        robot.line_target_position = target.copy()
+current_goal_index = 0
 
 
 try:
@@ -121,11 +73,10 @@ try:
                 time.sleep(1)
 
                 current_goal_index = 0
-                clear_line_data()
-                choose_leader_by_current_goal()
+                target_position = robots[0].goal_positions[current_goal_index]
 
-                print("Triângulo inicial formado.")
-                print("Indo para o Goal1.")
+                Robot.clear_line_data(robots)
+                leader = Robot.choose_leader(robots, target_position)
 
                 state = "MOVE_TRIANGLE"
 
@@ -133,17 +84,13 @@ try:
         elif state == "MOVE_TRIANGLE":
 
             # Detecta passagem estreita
-            if leader.detect_narrow_passage(robots):
-                print(
-                    f"Passagem estreita detectada indo para o {get_current_goal_name()}."
-                )
-
+            if leader.detect_narrow_passage(target_position):
                 for robot in robots:
                     robot.stop_robot()
 
                 time.sleep(2)
 
-                prepare_line_formation()
+                leader, line_order = Robot.prepare_line_formation(robots, target_position)
 
                 state = "FORM_LINE"
                 continue
@@ -151,122 +98,71 @@ try:
             # Movimento normal em triângulo
             for robot in robots:
                 if robot is leader:
-                    run_leader_to_current_goal()
+                    robot.run(robots, mode="go_to_goal", target_position=target_position)
                 else:
                     robot.run(robots, mode="formation")
 
             # Verifica chegada ao objetivo atual
-            if leader_arrived():
+            if leader.arrived_target(target_position):
                 for robot in robots:
                     robot.stop_robot()
 
                 time.sleep(1)
 
-                goal_reached = get_current_goal_name()
-                print(f"{goal_reached} alcançado.")
-
                 # Se ainda existem próximos goals
                 if current_goal_index < len(goal_paths) - 1:
-                    print("Formando triângulo novamente.")
                     state = "FORM_TRIANGLE_AFTER_GOAL"
                 
                 # Se chegou no último goal
                 else:
-                    print("Último objetivo alcançado. Encerrando simulação")
+                    time.sleep(2)
                     sim.stopSimulation()
                     break
 
         # FORMAÇÃO EM LINHA
         elif state == "FORM_LINE":
-            max_errors = []
+            line_ready = Robot.form_line(robots, leader)
 
-            for robot in robots:
-                if robot is leader:
-                    robot.stop_robot()
-                    robot.max_error = 0.0
-                else:
-                    robot.run(
-                        robots,
-                        mode="line_formation"
-                    )
-
-                max_errors.append(robot.max_error)
-
-            global_line_error = max(max_errors)
-
-            if global_line_error < Parameters.LINE_TOL:
+            if line_ready:
                 for robot in robots:
                     robot.stop_robot()
-
                 time.sleep(1)
 
-                print(
-                    f"Linha formada. Continuando para o {get_current_goal_name()}."
-                )
-
-                # Continua para o mesmo objetivo
                 state = "MOVE_LINE"
 
         # MOVIMENTO EM LINHA PARA O OBJETIVO ATUAL
         elif state == "MOVE_LINE":
-
             for robot in robots:
                 if robot is leader:
-                    run_leader_to_current_goal()
+                    robot.run(robots, mode="go_to_goal", target_position=target_position)
                 else:
-                    robot.run(
-                        robots,
-                        mode="line_formation"
-                    )
+                    robot.run(robots, mode="line_formation")
 
-            if leader_arrived():
+            if leader.arrived_target(target_position):
                 for robot in robots:
                     robot.stop_robot()
-
                 time.sleep(1)
 
-                goal_reached = get_current_goal_name()
-                print(f"{goal_reached} alcançado em formação de linha.")
-
-                # Se ainda existem próximos goals
                 if current_goal_index < len(goal_paths) - 1:
-                    print("Formando triângulo novamente.")
-
-                    state = "FORM_TRIANGLE_GOAL1"
-
-                # Se chegou no úlimo goal
+                    state = "FORM_TRIANGLE_AFTER_GOAL"
                 else:
-                    print("Último objetivo alcançado. Encerrado simulação")
-
                     sim.stopSimulation()
                     break
 
-        # REFORMA O TRIÂNGULO NO GOAL1
-        elif state == "FORM_TRIANGLE_GOAL1":
-            max_errors = []
+        # REFORMA O TRIÂNGULO NO GOAL
+        elif state == "FORM_TRIANGLE_AFTER_GOAL":
+            triangle_ready = Robot.form_triangle(robots)
 
-            for robot in robots:
-                robot.run(robots, mode="formation")
-                max_errors.append(robot.max_error)
-
-            global_max_error = max(max_errors)
-
-            if global_max_error < Parameters.DIST_TOL:
+            if triangle_ready:
                 for robot in robots:
                     robot.stop_robot()
-
                 time.sleep(1)
 
-                previous_goal = get_current_goal_name()
-
-                # Avança para o próximo goal
                 current_goal_index += 1
+                target_position = robots[0].goal_positions[current_goal_index]
 
-                clear_line_data()
-                choose_leader_by_current_goal()
-
-                print(f"Triângulo reformado após o {previous_goal}.")
-                print(f"Indo para o {get_current_goal_name()}.")
+                Robot.clear_line_data(robots)
+                leader = Robot.choose_leader(robots, target_position)
 
                 state = "MOVE_TRIANGLE"
 
@@ -277,7 +173,7 @@ except KeyboardInterrupt:
     sim.stopSimulation()
 
 
-Robot.Robot.remove_created_epucks(
+Robot.remove_created_epucks(
     sim,
     created_epucks
 )

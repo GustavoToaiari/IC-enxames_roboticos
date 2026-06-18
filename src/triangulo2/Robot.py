@@ -24,6 +24,8 @@ class Robot:
         self.line_order = None
         self.line_target_position = None
 
+        self.max_error = 0
+
 
     def run(self, robots=None, mode="formation", target_position=None): 
         self.get_pose_2d() # Pose do robô é atualizada a cada iteração
@@ -44,18 +46,19 @@ class Robot:
                 return False
             
             if self.arrived_target(target_position):
-                return False
+                return True
             
-            self.force - np.array([0.0,0.0])
+            self.force = np.array([0.0,0.0])
             self.attraction_force(target_position)
             self.set_wheel_speeds(V_MAX_LEADER_GOAL)
+
+            return False
 
         elif mode == "stop":
             self.stop_robot()
             return False
 
-        self.force = 0
-        
+        self.force = np.array([0.0, 0.0])
         return False # Ainda não chegou ao goal
 
     @staticmethod
@@ -66,7 +69,7 @@ class Robot:
             angle += 2.0 * np.pi
         return angle
     
-    def arrived_target(self, target_position):
+    def arrived_target(self, target_position, stop=True):
         rho = np.linalg.norm(target_position - self.position)
 
         if rho < GOAL_TOL:
@@ -91,6 +94,12 @@ class Robot:
         return obstacles
     
     def set_wheel_speeds(self, V_MAX):
+        force_norm = np.linalg.norm(self.force)
+
+        # Se a força for muito pequena, considera que chegou no ponto desejado
+        if force_norm < 0.02:
+            self.stop_robot()
+            return
 
         angle_desired = np.atan2(self.force[1], self.force[0]) # Para onde o robô deveria estar apontando
         angle = self.wrap_to_pi(angle_desired - self.orientation) # Erro entre a direção desejada e orientação atual
@@ -236,7 +245,134 @@ class Robot:
         error_vector = desired_position - self.position
 
         self.max_error = np.linalg.norm(error_vector)
-        self.force = K_LINE * error_vector
+        self.force = K_LINE * error_vector  
+
+    def detect_narrow_passage(self, target_position):
+        target_vector = target_position - self.position
+        target_norm = np.linalg.norm(target_vector)
+
+        if target_norm < 1e-6:
+            return False
+
+        forward = target_vector / target_norm
+
+        visible_walls = []
+
+        for wall in self.obstacles:
+            seg_a, seg_b, thickness = self.get_wall_segment(wall)
+
+            distance_to_wall_centerline, closest_point = Robot.point_to_segment_distance(
+                self.position,
+                seg_a,
+                seg_b
+            )
+
+            distance_to_wall_surface = distance_to_wall_centerline - thickness / 2.0
+
+            if distance_to_wall_surface > LEADER_VISION_RADIUS:
+                continue
+
+            vec_to_wall = closest_point - self.position
+            vec_norm = np.linalg.norm(vec_to_wall)
+
+            if vec_norm < 1e-6:
+                continue
+
+            dir_to_wall = vec_to_wall / vec_norm
+
+            dot_value = np.dot(forward, dir_to_wall)
+            dot_value = np.clip(dot_value, -1.0, 1.0)
+
+            angle_to_wall = np.arccos(dot_value)
+
+            if angle_to_wall > LEADER_FOV_ANGLE / 2.0:
+                continue
+
+            visible_walls.append({
+                "a": seg_a,
+                "b": seg_b,
+                "thickness": thickness
+            })
+
+        if len(visible_walls) < 2:
+            return False
+
+        for i in range(len(visible_walls)):
+            for j in range(i + 1, len(visible_walls)):
+                wall_1 = visible_walls[i]
+                wall_2 = visible_walls[j]
+
+                centerline_distance = Robot.segment_to_segment_distance(
+                    wall_1["a"],
+                    wall_1["b"],
+                    wall_2["a"],
+                    wall_2["b"]
+                )
+
+                free_width = (
+                    centerline_distance
+                    - wall_1["thickness"] / 2.0
+                    - wall_2["thickness"] / 2.0
+                )
+
+                if 0.0 < free_width < MIN_PASSAGE_WIDTH:
+                    return True
+
+        return False
+    
+    @staticmethod
+    def choose_leader(robots, target_position):
+        return min(robots, key=lambda robot: np.linalg.norm(target_position - robot.position))
+
+    @staticmethod
+    def prepare_line_formation(robots, target_position):
+        line_order = sorted(
+            robots,
+            key=lambda robot: np.linalg.norm(target_position - robot.position)
+        )
+
+        leader = line_order[0]
+
+        for robot in robots:
+            robot.leader = leader
+            robot.line_order = line_order
+            robot.line_target_position = target_position.copy()
+
+        return leader, line_order
+    
+    @staticmethod
+    def form_triangle(robots):
+        max_errors = []
+
+        for robot in robots:
+            robot.run(robots, mode="formation")
+            max_errors.append(robot.max_error)
+
+        return max(max_errors) < DIST_TOL
+    
+    @staticmethod
+    def form_line(robots, leader):
+        max_errors = []
+
+        for robot in robots:
+            if robot is leader:
+                robot.stop_robot()
+                robot.max_error = 0.0
+            else:
+                robot.run(robots, mode="line_formation")
+
+            max_errors.append(robot.max_error)
+
+        return max(max_errors) < LINE_TOL
+    
+
+    @staticmethod
+    def clear_line_data(robots):
+        for robot in robots:
+            robot.leader = None
+            robot.line_order = None
+            robot.line_target_position = None
+
 
     @staticmethod
     def create_epucks(sim, n_robots):
@@ -264,28 +400,128 @@ class Robot:
             
 
         return created_epucks
-    
-
-    def detect_narrow_passage(self, robots):
-        """
-        Detecta passagem estreita à frente do líder.
-        Se a largura disponível for menor que 0.3 m, retorna True.
-        """
-        # largura mínima fixa da passagem
-        MIN_PASSAGE_WIDTH = 0.6  # metros
-
-        # Verifica a distância até os obstáculos à frente do líder
-        obstacles = self.get_obstacle_positions()
-
-        for obs in obstacles:
-            vec_to_obs = obs - self.position
-            dist = np.linalg.norm(vec_to_obs)  # distância do centro do líder até o obstáculo
-            if dist < MIN_PASSAGE_WIDTH:
-                return True  # passa a ser considerado estreito
-
-        return False
 
     @staticmethod
     def remove_created_epucks(sim, created_epucks):
         for epuck in created_epucks:
             sim.removeModel(epuck)
+
+    # Para identificar o obstaculo como parede e não cilindrico
+    def get_wall_segment(self, wall):
+        min_x = self.sim.getObjectFloatParam(wall, self.sim.objfloatparam_objbbox_min_x)
+        max_x = self.sim.getObjectFloatParam(wall, self.sim.objfloatparam_objbbox_max_x)
+        min_y = self.sim.getObjectFloatParam(wall, self.sim.objfloatparam_objbbox_min_y)
+        max_y = self.sim.getObjectFloatParam(wall, self.sim.objfloatparam_objbbox_max_y)
+
+        size_x = max_x - min_x
+        size_y = max_y - min_y
+
+        center_x = (min_x + max_x) / 2.0
+        center_y = (min_y + max_y) / 2.0
+
+        if size_x >= size_y:
+            p1_local = np.array([min_x, center_y, 0.0])
+            p2_local = np.array([max_x, center_y, 0.0])
+            thickness = size_y
+        else:
+            p1_local = np.array([center_x, min_y, 0.0])
+            p2_local = np.array([center_x, max_y, 0.0])
+            thickness = size_x
+
+        p1_world = self.local_to_world_2d(wall, p1_local)
+        p2_world = self.local_to_world_2d(wall, p2_local)
+
+        return p1_world, p2_world, thickness
+
+
+    def local_to_world_2d(self, obj, point_local):
+        matrix = self.sim.getObjectMatrix(obj, -1)
+
+        x = (
+            matrix[0] * point_local[0]
+            + matrix[1] * point_local[1]
+            + matrix[2] * point_local[2]
+            + matrix[3]
+        )
+
+        y = (
+            matrix[4] * point_local[0]
+            + matrix[5] * point_local[1]
+            + matrix[6] * point_local[2]
+            + matrix[7]
+        )
+
+        return np.array([x, y])
+
+
+    @staticmethod
+    def point_to_segment_distance(point, seg_a, seg_b):
+        ab = seg_b - seg_a
+        ab_norm_sq = np.dot(ab, ab)
+
+        if ab_norm_sq < 1e-9:
+            return np.linalg.norm(point - seg_a), seg_a
+
+        t = np.dot(point - seg_a, ab) / ab_norm_sq
+        t = np.clip(t, 0.0, 1.0)
+
+        closest = seg_a + t * ab
+        distance = np.linalg.norm(point - closest)
+
+        return distance, closest
+
+
+    @staticmethod
+    def orientation(a, b, c):
+        return (
+            (b[0] - a[0]) * (c[1] - a[1])
+            - (b[1] - a[1]) * (c[0] - a[0])
+        )
+
+
+    @staticmethod
+    def on_segment(a, b, c):
+        return (
+            min(a[0], b[0]) <= c[0] <= max(a[0], b[0])
+            and min(a[1], b[1]) <= c[1] <= max(a[1], b[1])
+        )
+
+
+    @staticmethod
+    def segments_intersect(a, b, c, d):
+        o1 = Robot.orientation(a, b, c)
+        o2 = Robot.orientation(a, b, d)
+        o3 = Robot.orientation(c, d, a)
+        o4 = Robot.orientation(c, d, b)
+
+        eps = 1e-9
+
+        if o1 * o2 < 0 and o3 * o4 < 0:
+            return True
+
+        if abs(o1) < eps and Robot.on_segment(a, b, c):
+            return True
+
+        if abs(o2) < eps and Robot.on_segment(a, b, d):
+            return True
+
+        if abs(o3) < eps and Robot.on_segment(c, d, a):
+            return True
+
+        if abs(o4) < eps and Robot.on_segment(c, d, b):
+            return True
+
+        return False
+
+
+    @staticmethod
+    def segment_to_segment_distance(a, b, c, d):
+        if Robot.segments_intersect(a, b, c, d):
+            return 0.0
+
+        d1, _ = Robot.point_to_segment_distance(a, c, d)
+        d2, _ = Robot.point_to_segment_distance(b, c, d)
+        d3, _ = Robot.point_to_segment_distance(c, a, b)
+        d4, _ = Robot.point_to_segment_distance(d, a, b)
+
+        return min(d1, d2, d3, d4)
