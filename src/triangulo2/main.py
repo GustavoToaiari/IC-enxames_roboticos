@@ -14,14 +14,15 @@ created_epucks = Robot.create_epucks(sim, 3) # Vai criar 3 robos, pois o ePuck1 
 goal_paths = [
     sim.getObject('/Goal1'),
     sim.getObject('/Goal2'),
-    sim.getObject('/Goal3')
+    sim.getObject('/Goal3'),
+    sim.getObject('/Goal4')
 ]
 
 obstacles = [
     sim.getObject('/Cuboid1'), sim.getObject('/Cuboid2'), sim.getObject('/Cuboid3'),
     sim.getObject('/Cuboid4'), sim.getObject('/Cuboid5'), sim.getObject('/Cuboid6'),
     sim.getObject('/Cuboid7'), sim.getObject('/Cuboid8'), sim.getObject('/Cuboid9'),
-    sim.getObject('/Cuboid10'), sim.getObject('/Cuboid11'), sim.getObject('/Cuboid12')
+    sim.getObject('/Cuboid10'), sim.getObject('/Cylinder1')
 ]
 
 robots = []
@@ -85,14 +86,9 @@ try:
 
             # Detecta passagem estreita
             if leader.detect_narrow_passage(target_position):
-                for robot in robots:
-                    robot.stop_robot()
-
-                time.sleep(2)
-
                 leader, line_order = Robot.prepare_line_formation(robots, target_position)
 
-                state = "FORM_LINE"
+                state = "MOVE_LINE"
                 continue
 
             # Movimento normal em triângulo
@@ -153,18 +149,14 @@ try:
         elif state == "FORM_TRIANGLE_AFTER_GOAL":
             triangle_ready = Robot.form_triangle(robots)
 
-            if triangle_ready:
-                for robot in robots:
-                    robot.stop_robot()
-                time.sleep(1)
 
-                current_goal_index += 1
-                target_position = robots[0].goal_positions[current_goal_index]
+            current_goal_index += 1
+            target_position = robots[0].goal_positions[current_goal_index]
 
-                Robot.clear_line_data(robots)
-                leader = Robot.choose_leader(robots, target_position)
+            Robot.clear_line_data(robots)
+            leader = Robot.choose_leader(robots, target_position)
 
-                state = "MOVE_TRIANGLE"
+            state = "MOVE_TRIANGLE"
 
 
 except KeyboardInterrupt:

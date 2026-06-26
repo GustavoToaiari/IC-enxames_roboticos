@@ -7,7 +7,7 @@ V_MAX = 0.26 *4
 W_MAX = V_MAX/WHEEL_RADIUS
 WHEEL_OMEGA_MAX = 20.0
 
-GOAL_TOL = 0.1
+GOAL_TOL = 0.2
 ROBOT_RADIUS = 0.0724/2
 
 OBSTACLE_RADIUS = 0.25
@@ -16,11 +16,11 @@ OBSTACLE_RADIUS = 0.25
 K_ATT = 1
 K_REP = 0.35 # Antes: 0.08
 K_ROT = 50.0
-REP_RANGE = 0.6
+REP_RANGE = 0.1
 
 # Mapeamento força -> (v,w)
 K_V = 0.2
-K_W = 3.5*2 # Para 3 robôs: *6;
+K_W = 3.5 # Para 3 robôs: *6;
 
 # Repulsão entre robôs
 K_REP_ROBOTS = 0.35
@@ -39,4 +39,8 @@ K_LINE = 1.5
 
 LEADER_VISION_RADIUS = 0.5
 MIN_PASSAGE_WIDTH = 0.6
-LEADER_FOV_ANGLE = math.radians(180)
+LEADER_FOV_ANGLE = math.radians(120)
+
+
+REP_SCALE_LEADER = 1.0
+REP_SCALE_FOLLOWER = 0.05

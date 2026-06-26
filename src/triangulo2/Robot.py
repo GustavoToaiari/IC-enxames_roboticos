@@ -32,11 +32,13 @@ class Robot:
         
         if mode == "formation":
             self.formation_force(robots)
+            self.repulsive_force(repulsion_scale=REP_SCALE_FOLLOWER)
             self.set_wheel_speeds(V_MAX_FORMATION)
             return False
         
         elif mode == "line_formation":
             self.line_formation_force()
+            self.repulsive_force(repulsion_scale=REP_SCALE_FOLLOWER)
             self.set_wheel_speeds(V_MAX_FORMATION)
             return False
         
@@ -45,11 +47,12 @@ class Robot:
                 self.stop_robot()
                 return False
             
-            if self.arrived_target(target_position):
+            if self.arrived_target(target_position, stop=False):
                 return True
             
             self.force = np.array([0.0,0.0])
             self.attraction_force(target_position)
+            self.repulsive_force(repulsion_scale=REP_SCALE_LEADER)
             self.set_wheel_speeds(V_MAX_LEADER_GOAL)
 
             return False
@@ -73,7 +76,8 @@ class Robot:
         rho = np.linalg.norm(target_position - self.position)
 
         if rho < GOAL_TOL:
-            self.stop_robot()
+            if stop:
+                self.stop_robot()
             return True
         
         return False
@@ -127,24 +131,53 @@ class Robot:
     def attraction_force(self, target_position):
         self.force = self.force + (target_position - self.position) * K_ATT
 
-    def repulsive_force(self):
-        obstacles = self.get_obstacle_positions()
-        obs_rad = 0.25
+    def repulsive_force(self, repulsion_scale=1.0):
         F_rep = np.zeros_like(self.force)
 
-        for obs in obstacles:
-            dir = self.position - obs
-            dist = np.linalg.norm(dir) - obs_rad - ROBOT_RADIUS
-            if dist < REP_RANGE:
-                F_rep = F_rep + (
-                    (K_REP / (dist ** 2)) *
-                    ((1 / dist) - (1 / REP_RANGE)) *
-                    (dir / REP_RANGE)
-                )
-            else:
-                F_rep = F_rep + np.zeros_like(self.force)
+        for obs in self.obstacles:
+            # Caso 1: obstáculo retangular / parede
+            if self.is_wall(obs):
+                seg_a, seg_b, thickness = self.get_wall_segment(obs)
 
-        self.force = self.force + F_rep
+                distance_to_centerline, closest_point = Robot.point_to_segment_distance(
+                    self.position,
+                    seg_a,
+                    seg_b
+                )
+                # distância até a "superficie" da parede
+                dist = distance_to_centerline - thickness/2.0 - ROBOT_RADIUS
+
+                direction_vec = self.position - closest_point
+                norm_dir = np.linalg.norm(direction_vec)
+            
+            # Caso 2: obstáculo ciruclar / cilindrico
+            else:
+                obs_pos = np.array(self.sim.getObjectPosition(obs, -1)[:2])
+
+                direction_vec = self.position - obs_pos
+                norm_dir = np.linalg.norm(direction_vec)
+
+                dist = norm_dir - OBSTACLE_RADIUS - ROBOT_RADIUS
+            
+            # Para evitar erro númerico
+            if norm_dir < 1e-6:
+                continue
+
+            direction = direction_vec / norm_dir
+
+            # Evita divisão por zero
+            dist = max(dist, 0.03)
+            
+            if dist < REP_RANGE:
+                F_rep += (
+                    K_REP
+                    * ((1.0 / dist) - (1.0 / REP_RANGE))
+                    * (1.0 / (dist ** 2))
+                    * direction
+                )
+
+
+        self.force = self.force + repulsion_scale * F_rep
 
     def repulsive_r2r (self, robots):
         REP_RANGE = 3 * ROBOT_RADIUS
@@ -379,8 +412,8 @@ class Robot:
         created_epucks = []
         epuck_template = sim.getObject('/ePuck1')
 
-        x_min, x_max = 1.0, 2.3  # Limites de X
-        y_min, y_max = -1.0, -2.3  # Limites de Y
+        x_min, x_max = -0.5, 0.5  # Limites de X
+        y_min, y_max = -0.5, 0.5  # Limites de Y
 
         for i in range(2, n_robots+1):  # Correção para incluir o último robô
             copied = sim.copyPasteObjects([epuck_template], 1)
@@ -405,6 +438,10 @@ class Robot:
     def remove_created_epucks(sim, created_epucks):
         for epuck in created_epucks:
             sim.removeModel(epuck)
+
+    def is_wall(self, obstacle):
+        alias = self.sim.getObjectAlias(obstacle)
+        return "Cuboid" in alias
 
     # Para identificar o obstaculo como parede e não cilindrico
     def get_wall_segment(self, wall):
