@@ -22,7 +22,8 @@ obstacles = [
     sim.getObject('/Cuboid1'), sim.getObject('/Cuboid2'), sim.getObject('/Cuboid3'),
     sim.getObject('/Cuboid4'), sim.getObject('/Cuboid5'), sim.getObject('/Cuboid6'),
     sim.getObject('/Cuboid7'), sim.getObject('/Cuboid8'), sim.getObject('/Cuboid9'),
-    sim.getObject('/Cuboid10'), sim.getObject('/Cylinder1')
+    sim.getObject('/Cuboid10'), sim.getObject('/Cuboid11'), sim.getObject('/Cylinder1'),
+    sim.getObject('/Cylinder2')
 ]
 
 robots = []

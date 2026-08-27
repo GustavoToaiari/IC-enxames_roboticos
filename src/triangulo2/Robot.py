@@ -177,7 +177,20 @@ class Robot:
                 )
 
 
-        self.force = self.force + repulsion_scale * F_rep
+        F_rep_scaled = repulsion_scale * F_rep
+
+        rep_norm = np.linalg.norm(F_rep_scaled)
+
+        if repulsion_scale < 1.0:
+            rep_max = F_REP_MAX_FOLLOWER
+        else:
+            rep_max = F_REP_MAX_LEADER
+
+        if rep_norm > rep_max:
+            F_rep_scaled = (F_rep_scaled / rep_norm) * rep_max
+
+        self.force = self.force + F_rep_scaled
+
 
     def repulsive_r2r (self, robots):
         REP_RANGE = 3 * ROBOT_RADIUS
@@ -412,8 +425,8 @@ class Robot:
         created_epucks = []
         epuck_template = sim.getObject('/ePuck1')
 
-        x_min, x_max = -0.5, 0.5  # Limites de X
-        y_min, y_max = -0.5, 0.5  # Limites de Y
+        x_min, x_max = 0.5, 1.5  # Limites de X
+        y_min, y_max = 1.6, 2.3  # Limites de Y
 
         for i in range(2, n_robots+1):  # Correção para incluir o último robô
             copied = sim.copyPasteObjects([epuck_template], 1)
