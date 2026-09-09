@@ -44,6 +44,8 @@ state = "FORM_TRIANGLE_INITIAL"
 leader = None
 line_order = None
 
+passage_detected_time = None
+
 # Objetivo atual:
 # 1 = Goal1
 # 2 = Goal2
@@ -140,20 +142,32 @@ try:
 
             if last_robot.detect_narrow_passage(target_position):
 
-                Robot.clear_line_data(robots)
+                if passage_detected_time is None:
+
+                    passage_detected_time = time.time()
+
+                elif (
+                    time.time() - passage_detected_time
+                    >= Parameters.PASSAGE_TRANSITION_DELAY
+                ):
+
+                    Robot.clear_line_data(robots)
+
+                    leader = Robot.choose_leader(
+                        robots,
+                        target_position
+                    )
+
+                    passage_detected_time = None
+
+                    state = "FORM_TRIANGLE_AFTER_PASSAGE"
+
+                    continue
 
 
-                # Escolhe novamente o robô mais próximo
-                # do objetivo como líder
-                leader = Robot.choose_leader(
-                    robots,
-                    target_position
-                )
+            else:
 
-
-                state = "FORM_TRIANGLE_AFTER_PASSAGE"
-
-                continue
+                passage_detected_time = None
 
 
 
@@ -202,13 +216,13 @@ try:
                     sim.stopSimulation()
                     break
 
-                # ============================================
+        # ============================================
         # Retorno da linha para triângulo após passagem
         # ============================================
 
         elif state == "FORM_TRIANGLE_AFTER_PASSAGE":
 
-
+            
             max_errors = []
 
 

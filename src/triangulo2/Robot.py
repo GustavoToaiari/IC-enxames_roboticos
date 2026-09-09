@@ -135,7 +135,7 @@ class Robot:
         angle_desired = np.atan2(self.force[1], self.force[0]) # Para onde o robô deveria estar apontando
         angle = self.wrap_to_pi(angle_desired - self.orientation) # Erro entre a direção desejada e orientação atual
 
-        v = K_V * np.linalg.norm(self.force) # velocidade linear depende apenas da distância até o goal
+        v = K_V #* np.linalg.norm(self.force) # velocidade linear depende apenas da distância até o goal
         v = max(min(v, V_MAX), 0.1*V_MAX) 
 
         w = K_W * angle # velocidade angular depende apenas do erro angular
