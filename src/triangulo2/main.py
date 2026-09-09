@@ -22,8 +22,8 @@ obstacles = [
     sim.getObject('/Cuboid1'), sim.getObject('/Cuboid2'), sim.getObject('/Cuboid3'),
     sim.getObject('/Cuboid4'), sim.getObject('/Cuboid5'), sim.getObject('/Cuboid6'),
     sim.getObject('/Cuboid7'), sim.getObject('/Cuboid8'), sim.getObject('/Cuboid9'),
-    sim.getObject('/Cuboid10'), sim.getObject('/Cuboid11'), sim.getObject('/Cylinder1'),
-    sim.getObject('/Cylinder2')
+    sim.getObject('/Cuboid10'), sim.getObject('/Cuboid11'), sim.getObject('/Cuboid12'),
+    sim.getObject('/Cylinder1')
 ]
 
 robots = []
@@ -129,22 +129,126 @@ try:
 
         # MOVIMENTO EM LINHA PARA O OBJETIVO ATUAL
         elif state == "MOVE_LINE":
+
+
+            # ============================================
+            # Verifica se o último robô saiu da passagem
+            # ============================================
+
+            last_robot = Robot.get_last_robot_line(line_order)
+
+
+            if last_robot.detect_narrow_passage(target_position):
+
+                Robot.clear_line_data(robots)
+
+
+                # Escolhe novamente o robô mais próximo
+                # do objetivo como líder
+                leader = Robot.choose_leader(
+                    robots,
+                    target_position
+                )
+
+
+                state = "FORM_TRIANGLE_AFTER_PASSAGE"
+
+                continue
+
+
+
+            # ============================================
+            # Movimento normal em linha
+            # ============================================
+
             for robot in robots:
+
                 if robot is leader:
-                    robot.run(robots, mode="go_to_goal", target_position=target_position)
+
+                    robot.run(
+                        robots,
+                        mode="go_to_goal",
+                        target_position=target_position
+                    )
+
                 else:
-                    robot.run(robots, mode="line_formation")
+
+                    robot.run(
+                        robots,
+                        mode="line_formation"
+                    )
+
+
+
+            # ============================================
+            # Chegou no objetivo
+            # ============================================
 
             if leader.arrived_target(target_position):
+
                 for robot in robots:
                     robot.stop_robot()
+
+
                 time.sleep(1)
 
-                if current_goal_index < len(goal_paths) - 1:
+
+                if current_goal_index < len(goal_paths)-1:
+
                     state = "FORM_TRIANGLE_AFTER_GOAL"
+
                 else:
+
                     sim.stopSimulation()
                     break
+
+                # ============================================
+        # Retorno da linha para triângulo após passagem
+        # ============================================
+
+        elif state == "FORM_TRIANGLE_AFTER_PASSAGE":
+
+
+            max_errors = []
+
+
+            for robot in robots:
+
+
+                robot.run(
+                    robots,
+                    mode="formation_with_goal",
+                    target_position=target_position
+                )
+
+
+                max_errors.append(robot.max_error)
+
+
+
+            # Formação triangular concluída
+
+            if max(max_errors) < Parameters.DIST_TOL:
+
+
+                for robot in robots:
+                    robot.stop_robot()
+
+
+                time.sleep(0.5)
+
+
+                Robot.clear_line_data(robots)
+
+
+                # Novo líder
+                leader = Robot.choose_leader(
+                    robots,
+                    target_position
+                )
+
+
+                state = "MOVE_TRIANGLE"
 
         # REFORMA O TRIÂNGULO NO GOAL
         elif state == "FORM_TRIANGLE_AFTER_GOAL":

@@ -42,6 +42,33 @@ class Robot:
             self.set_wheel_speeds(V_MAX_FORMATION)
             return False
         
+        elif mode == "formation_with_goal":
+
+            # Líder continua indo para o objetivo
+            if self is self.leader:
+
+                self.force = np.array([0.0, 0.0])
+
+                self.attraction_force(target_position)
+
+                self.repulsive_force(
+                    repulsion_scale=REP_SCALE_LEADER
+                )
+
+            # Seguidores recuperam formação triangular
+            else:
+
+                self.formation_force(robots)
+
+                self.repulsive_force(
+                    repulsion_scale=REP_SCALE_FOLLOWER
+                )
+
+
+            self.set_wheel_speeds(V_MAX_FORMATION)
+
+            return False
+        
         elif mode == "go_to_goal":
             if target_position is None:
                 self.stop_robot()
@@ -369,6 +396,10 @@ class Robot:
     @staticmethod
     def choose_leader(robots, target_position):
         return min(robots, key=lambda robot: np.linalg.norm(target_position - robot.position))
+    
+    @staticmethod
+    def get_last_robot_line(line_order):
+        return line_order[-1]
 
     @staticmethod
     def prepare_line_formation(robots, target_position):
