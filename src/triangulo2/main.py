@@ -140,29 +140,20 @@ try:
             last_robot = Robot.get_last_robot_line(line_order)
 
 
-            if last_robot.detect_narrow_passage(target_position):
+            if last_robot.detect_narrow_passage_backward():
 
-                if passage_detected_time is None:
+                Robot.clear_line_data(robots)
 
-                    passage_detected_time = time.time()
+                leader = Robot.choose_leader(
+                    robots,
+                    target_position
+                )
 
-                elif (
-                    time.time() - passage_detected_time
-                    >= Parameters.PASSAGE_TRANSITION_DELAY
-                ):
+                passage_detected_time = None
 
-                    Robot.clear_line_data(robots)
+                state = "FORM_TRIANGLE_AFTER_PASSAGE"
 
-                    leader = Robot.choose_leader(
-                        robots,
-                        target_position
-                    )
-
-                    passage_detected_time = None
-
-                    state = "FORM_TRIANGLE_AFTER_PASSAGE"
-
-                    continue
+                continue
 
 
             else:

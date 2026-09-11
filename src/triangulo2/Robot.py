@@ -134,11 +134,12 @@ class Robot:
 
         angle_desired = np.atan2(self.force[1], self.force[0]) # Para onde o robô deveria estar apontando
         angle = self.wrap_to_pi(angle_desired - self.orientation) # Erro entre a direção desejada e orientação atual
-
+        
         v = K_V #* np.linalg.norm(self.force) # velocidade linear depende apenas da distância até o goal
         v = max(min(v, V_MAX), 0.1*V_MAX) 
 
         w = K_W * angle # velocidade angular depende apenas do erro angular
+        #w = max(min(w, 5), -5) # Saturação da velocidade angular
 
         # conversão de (v, w) para velocidades das rodas
         wr = v/WHEEL_RADIUS + (w*AXLE_LENGTH) / (2.0*WHEEL_RADIUS)
@@ -390,6 +391,102 @@ class Robot:
 
                 if 0.0 < free_width < MIN_PASSAGE_WIDTH:
                     return True
+
+        return False
+    
+    def detect_narrow_passage_backward(self):
+
+        # Direção traseira do robô
+        backward = np.array([
+            -np.cos(self.orientation),
+            -np.sin(self.orientation)
+        ])
+
+
+        visible_walls = []
+
+
+        for wall in self.obstacles:
+
+            seg_a, seg_b, thickness = self.get_wall_segment(wall)
+
+
+            distance_to_wall_centerline, closest_point = Robot.point_to_segment_distance(
+                self.position,
+                seg_a,
+                seg_b
+            )
+
+
+            distance_to_wall_surface = (
+                distance_to_wall_centerline
+                - thickness / 2
+            )
+
+
+            if distance_to_wall_surface > LEADER_VISION_RADIUS:
+                continue
+
+
+            vec_to_wall = closest_point - self.position
+            vec_norm = np.linalg.norm(vec_to_wall)
+
+
+            if vec_norm < 1e-6:
+                continue
+
+
+            dir_to_wall = vec_to_wall / vec_norm
+
+
+            dot_value = np.dot(backward, dir_to_wall)
+            dot_value = np.clip(dot_value, -1.0, 1.0)
+
+
+            angle_to_wall = np.arccos(dot_value)
+
+
+            if angle_to_wall > LEADER_FOV_ANGLE / 2:
+                continue
+
+
+            visible_walls.append({
+                "a": seg_a,
+                "b": seg_b,
+                "thickness": thickness
+            })
+
+
+        if len(visible_walls) < 2:
+            return False
+
+
+        for i in range(len(visible_walls)):
+
+            for j in range(i + 1, len(visible_walls)):
+
+                wall_1 = visible_walls[i]
+                wall_2 = visible_walls[j]
+
+
+                centerline_distance = Robot.segment_to_segment_distance(
+                    wall_1["a"],
+                    wall_1["b"],
+                    wall_2["a"],
+                    wall_2["b"]
+                )
+
+
+                free_width = (
+                    centerline_distance
+                    - wall_1["thickness"] / 2
+                    - wall_2["thickness"] / 2
+                )
+
+
+                if 0.0 < free_width < MIN_PASSAGE_WIDTH:
+                    return True
+
 
         return False
     
