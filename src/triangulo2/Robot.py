@@ -139,8 +139,6 @@ class Robot:
         v = max(min(v, V_MAX), 0.1*V_MAX) 
 
         w = K_W * angle # velocidade angular depende apenas do erro angular
-        #w = max(min(w, 5), -5) # Saturação da velocidade angular
-
         # conversão de (v, w) para velocidades das rodas
         wr = v/WHEEL_RADIUS + (w*AXLE_LENGTH) / (2.0*WHEEL_RADIUS)
         wl = v/WHEEL_RADIUS - (w*AXLE_LENGTH) / (2.0*WHEEL_RADIUS)
@@ -164,8 +162,11 @@ class Robot:
 
         for obs in self.obstacles:
             # Caso 1: obstáculo retangular / parede
-            if self.is_wall(obs):
-                seg_a, seg_b, thickness = self.get_wall_segment(obs)
+            if obs["type"] == "wall":
+
+                seg_a = obs["a"]
+                seg_b = obs["b"]
+                thickness = obs["thickness"]
 
                 distance_to_centerline, closest_point = Robot.point_to_segment_distance(
                     self.position,
@@ -180,7 +181,7 @@ class Robot:
             
             # Caso 2: obstáculo ciruclar / cilindrico
             else:
-                obs_pos = np.array(self.sim.getObjectPosition(obs, -1)[:2])
+                obs_pos = obs["position"]
 
                 direction_vec = self.position - obs_pos
                 norm_dir = np.linalg.norm(direction_vec)
@@ -333,7 +334,13 @@ class Robot:
         visible_walls = []
 
         for wall in self.obstacles:
-            seg_a, seg_b, thickness = self.get_wall_segment(wall)
+
+            if wall["type"] != "wall":
+                continue
+
+            seg_a = wall["a"]
+            seg_b = wall["b"]
+            thickness = wall["thickness"]
 
             distance_to_wall_centerline, closest_point = Robot.point_to_segment_distance(
                 self.position,
@@ -408,7 +415,12 @@ class Robot:
 
         for wall in self.obstacles:
 
-            seg_a, seg_b, thickness = self.get_wall_segment(wall)
+            if wall["type"] != "wall":
+                continue
+
+            seg_a = wall["a"]
+            seg_b = wall["b"]
+            thickness = wall["thickness"]
 
 
             distance_to_wall_centerline, closest_point = Robot.point_to_segment_distance(
@@ -580,38 +592,6 @@ class Robot:
         for epuck in created_epucks:
             sim.removeModel(epuck)
 
-    def is_wall(self, obstacle):
-        alias = self.sim.getObjectAlias(obstacle)
-        return "Cuboid" in alias
-
-    # Para identificar o obstaculo como parede e não cilindrico
-    def get_wall_segment(self, wall):
-        min_x = self.sim.getObjectFloatParam(wall, self.sim.objfloatparam_objbbox_min_x)
-        max_x = self.sim.getObjectFloatParam(wall, self.sim.objfloatparam_objbbox_max_x)
-        min_y = self.sim.getObjectFloatParam(wall, self.sim.objfloatparam_objbbox_min_y)
-        max_y = self.sim.getObjectFloatParam(wall, self.sim.objfloatparam_objbbox_max_y)
-
-        size_x = max_x - min_x
-        size_y = max_y - min_y
-
-        center_x = (min_x + max_x) / 2.0
-        center_y = (min_y + max_y) / 2.0
-
-        if size_x >= size_y:
-            p1_local = np.array([min_x, center_y, 0.0])
-            p2_local = np.array([max_x, center_y, 0.0])
-            thickness = size_y
-        else:
-            p1_local = np.array([center_x, min_y, 0.0])
-            p2_local = np.array([center_x, max_y, 0.0])
-            thickness = size_x
-
-        p1_world = self.local_to_world_2d(wall, p1_local)
-        p2_world = self.local_to_world_2d(wall, p2_local)
-
-        return p1_world, p2_world, thickness
-
-
     def local_to_world_2d(self, obj, point_local):
         matrix = self.sim.getObjectMatrix(obj, -1)
 
@@ -703,3 +683,142 @@ class Robot:
         d4, _ = Robot.point_to_segment_distance(d, a, b)
 
         return min(d1, d2, d3, d4)
+    
+    @staticmethod
+    def create_obstacle_cache(sim, obstacles):
+
+        cache = []
+
+        for obs in obstacles:
+
+            alias = sim.getObjectAlias(obs)
+
+            # Parede
+            if "Cuboid" in alias:
+
+                min_x = sim.getObjectFloatParam(
+                    obs,
+                    sim.objfloatparam_objbbox_min_x
+                )
+
+                max_x = sim.getObjectFloatParam(
+                    obs,
+                    sim.objfloatparam_objbbox_max_x
+                )
+
+                min_y = sim.getObjectFloatParam(
+                    obs,
+                    sim.objfloatparam_objbbox_min_y
+                )
+
+                max_y = sim.getObjectFloatParam(
+                    obs,
+                    sim.objfloatparam_objbbox_max_y
+                )
+
+
+                size_x = max_x - min_x
+                size_y = max_y - min_y
+
+
+                center_x = (min_x + max_x)/2
+                center_y = (min_y + max_y)/2
+
+
+                if size_x >= size_y:
+
+                    p1_local = np.array(
+                        [min_x, center_y, 0]
+                    )
+
+                    p2_local = np.array(
+                        [max_x, center_y, 0]
+                    )
+
+                    thickness = size_y
+
+                else:
+
+                    p1_local = np.array(
+                        [center_x, min_y, 0]
+                    )
+
+                    p2_local = np.array(
+                        [center_x, max_y, 0]
+                    )
+
+                    thickness = size_x
+
+
+                p1_world = Robot.local_to_world_2d_static(
+                    sim,
+                    obs,
+                    p1_local
+                )
+
+                p2_world = Robot.local_to_world_2d_static(
+                    sim,
+                    obs,
+                    p2_local
+                )
+
+
+                cache.append(
+                    {
+                        "type":"wall",
+                        "a":p1_world,
+                        "b":p2_world,
+                        "thickness":thickness
+                    }
+                )
+
+
+            # Cilindro
+            else:
+
+                pos = sim.getObjectPosition(obs,-1)
+
+                cache.append(
+                    {
+                        "type":"circle",
+                        "position":np.array(
+                            [pos[0],pos[1]]
+                        )
+                    }
+                )
+
+
+        return cache
+    
+    @staticmethod
+    def local_to_world_2d_static(sim,obj,point_local):
+
+        matrix = sim.getObjectMatrix(
+            obj,
+            -1
+        )
+
+
+        x = (
+            matrix[0]*point_local[0]
+            +
+            matrix[1]*point_local[1]
+            +
+            matrix[2]*point_local[2]
+            +
+            matrix[3]
+        )
+
+
+        y = (
+            matrix[4]*point_local[0]
+            +
+            matrix[5]*point_local[1]
+            +
+            matrix[6]*point_local[2]
+            +
+            matrix[7]
+        )
+
+
+        return np.array([x,y])

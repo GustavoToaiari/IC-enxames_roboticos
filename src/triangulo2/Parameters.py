@@ -16,7 +16,7 @@ OBSTACLE_RADIUS = 0.25
 K_ATT = 1
 K_REP = 0.35 # Antes: 0.08
 K_ROT = 50.0
-REP_RANGE = 0.1
+REP_RANGE = 0.05
 
 # Mapeamento força -> (v,w)
 K_V = 0.2

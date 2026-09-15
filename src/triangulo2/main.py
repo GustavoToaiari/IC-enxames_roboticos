@@ -26,13 +26,15 @@ obstacles = [
     sim.getObject('/Cylinder1')
 ]
 
+obstacle_cache = Robot.create_obstacle_cache(sim, obstacles)
+
 robots = []
 for i in range(1, 4): # Vai percorrer 4 robos
     robots.append(Robot(name= 'ePuck'+f"{i}",
                 base=sim.getObject('/ePuck'+f"{i}"+'/base'),
                 goal_paths=goal_paths,
                 wheel_path=(sim.getObject('/ePuck'+f"{i}"+'/leftJoint'), sim.getObject('/ePuck'+f"{i}"+'/rightJoint')),
-                obstacles=obstacles,
+                obstacles=obstacle_cache,
                 sim=sim))
 
 if sim.getSimulationState() == sim.simulation_stopped:
