@@ -1,5 +1,6 @@
 import numpy as np
 import random
+import time
 from Parameters import *
 
 class Robot:
@@ -26,6 +27,11 @@ class Robot:
 
         self.max_error = 0
 
+        self.line_start_time = None
+
+    def start_line_transition(self):
+        self.line_start_time = time.time()
+
 
     def run(self, robots=None, mode="formation", target_position=None): 
         self.get_pose_2d() # Pose do robô é atualizada a cada iteração
@@ -34,16 +40,56 @@ class Robot:
             self.formation_force(robots)
             self.repulsive_force(repulsion_scale=REP_SCALE_FOLLOWER)
             self.set_wheel_speeds(V_MAX_FORMATION)
+            #self.repulsive_r2r(robots)
             return False
         
         elif mode == "line_formation":
+
+
+            # posição do robô na fila
+            index = self.line_order.index(self)
+
+
+            # tempo que ele deve esperar
+            wait_time = (
+                index *
+                LINE_FORMATION_DELAY
+            )
+
+
+            # ainda não chegou sua vez
+            if (
+                time.time() -
+                self.line_start_time
+                <
+                wait_time
+            ):
+
+                self.stop_robot()
+
+                return False
+
+
+
+            # entrou na formação linha
+
             self.line_formation_force()
-            self.repulsive_force(repulsion_scale=REP_SCALE_FOLLOWER)
-            self.set_wheel_speeds(V_MAX_FORMATION)
+
+            self.repulsive_force(
+                repulsion_scale=REP_SCALE_FOLLOWER
+            )
+
+            #self.repulsive_r2r(robots)
+
+
+            self.set_wheel_speeds(
+                V_MAX_FORMATION
+            )
+
+
             return False
         
         elif mode == "formation_with_goal":
-
             # Líder continua indo para o objetivo
             if self is self.leader:
 
@@ -59,7 +105,7 @@ class Robot:
             else:
 
                 self.formation_force(robots)
-
+                #self.repulsive_r2r(robots)
                 self.repulsive_force(
                     repulsion_scale=REP_SCALE_FOLLOWER
                 )

@@ -9,7 +9,7 @@ client = RemoteAPIClient()
 sim = client.getObject('sim')
 client.setStepping(True)
 
-created_epucks = Robot.create_epucks(sim, 3) # Vai criar 3 robos, pois o ePuck1 ja esta na cena
+created_epucks = Robot.create_epucks(sim, 5) # Vai criar 3 robos, pois o ePuck1 ja esta na cena
 
 goal_paths = [
     sim.getObject('/Goal1'),
@@ -29,7 +29,7 @@ obstacles = [
 obstacle_cache = Robot.create_obstacle_cache(sim, obstacles)
 
 robots = []
-for i in range(1, 4): # Vai percorrer 4 robos
+for i in range(1, 6): # Vai percorrer 4 robos
     robots.append(Robot(name= 'ePuck'+f"{i}",
                 base=sim.getObject('/ePuck'+f"{i}"+'/base'),
                 goal_paths=goal_paths,
@@ -93,6 +93,9 @@ try:
             if leader.detect_narrow_passage(target_position):
                 leader, line_order = Robot.prepare_line_formation(robots, target_position)
 
+                for robot in robots:
+                    robot.line_start_time = time.time()
+
                 state = "MOVE_LINE"
                 continue
 
@@ -128,6 +131,9 @@ try:
                 for robot in robots:
                     robot.stop_robot()
                 time.sleep(1)
+
+                for robot in robots:
+                    robot.line_start_time = time.time()
 
                 state = "MOVE_LINE"
 
