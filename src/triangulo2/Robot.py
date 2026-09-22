@@ -29,6 +29,9 @@ class Robot:
 
         self.line_start_time = None
 
+        # Controle de movimento reverso
+        self.reverse_mode = False
+
     def start_line_transition(self):
         self.line_start_time = time.time()
 
@@ -90,16 +93,15 @@ class Robot:
             return False
         
         elif mode == "formation_with_goal":
-            # Líder continua indo para o objetivo
-            if self is self.leader:
-
+            # Durante a transição linha -> triângulo após a passagem estreita,
+            # o líder permanece parado e os seguidores se reposicionam ao redor dele.
+            # A identificação é feita pelo line_order, pois durante esta transição
+            # o líder da linha é a referência fixa da reconstrução.
+            if self.leader is self:
+                self.stop_robot()
                 self.force = np.array([0.0, 0.0])
-
-                self.attraction_force(target_position)
-
-                self.repulsive_force(
-                    repulsion_scale=REP_SCALE_LEADER
-                )
+                self.max_error = 0.0
+                return False
 
             # Seguidores recuperam formação triangular
             else:
@@ -180,15 +182,27 @@ class Robot:
 
         angle_desired = np.atan2(self.force[1], self.force[0]) # Para onde o robô deveria estar apontando
         angle = self.wrap_to_pi(angle_desired - self.orientation) # Erro entre a direção desejada e orientação atual
-        
-        v = K_V #* np.linalg.norm(self.force) # velocidade linear depende apenas da distância até o goal
-        v = max(min(v, V_MAX), 0.1*V_MAX) 
+
+        # Movimento reverso com histerese
+        if abs(angle) > np.radians(120):
+            self.reverse_mode = True
+        elif abs(angle) < np.radians(70):
+            self.reverse_mode = False
+
+        v = K_V
+
+        # Se o alvo estiver atrás, utiliza ré ao invés de girar 180 graus
+        if self.reverse_mode:
+            v = -v
+
+        v = max(min(v, V_MAX), -V_MAX)
 
         w = K_W * angle # velocidade angular depende apenas do erro angular
+
         # conversão de (v, w) para velocidades das rodas
         wr = v/WHEEL_RADIUS + (w*AXLE_LENGTH) / (2.0*WHEEL_RADIUS)
         wl = v/WHEEL_RADIUS - (w*AXLE_LENGTH) / (2.0*WHEEL_RADIUS)
-        
+
         # Saturação
         wr = max(min(wr, W_MAX), -W_MAX)
         wl = max(min(wl, W_MAX), -W_MAX)
@@ -321,6 +335,15 @@ class Robot:
 
         self.force = force
         self.max_error = max_error
+        print(
+            self.name,
+            "posição:",
+            self.position,
+            "força:",
+            self.force,
+            "erro:",
+            self.max_error
+        )
 
     def line_formation_force(self):
         if (

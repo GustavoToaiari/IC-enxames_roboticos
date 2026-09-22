@@ -9,7 +9,7 @@ client = RemoteAPIClient()
 sim = client.getObject('sim')
 client.setStepping(True)
 
-created_epucks = Robot.create_epucks(sim, 5) # Vai criar 3 robos, pois o ePuck1 ja esta na cena
+created_epucks = Robot.create_epucks(sim, 3) # Vai criar 3 robos, pois o ePuck1 ja esta na cena
 
 goal_paths = [
     sim.getObject('/Goal1'),
@@ -29,7 +29,7 @@ obstacles = [
 obstacle_cache = Robot.create_obstacle_cache(sim, obstacles)
 
 robots = []
-for i in range(1, 6): # Vai percorrer 4 robos
+for i in range(1, 4): # Vai percorrer 4 robos
     robots.append(Robot(name= 'ePuck'+f"{i}",
                 base=sim.getObject('/ePuck'+f"{i}"+'/base'),
                 goal_paths=goal_paths,
@@ -150,12 +150,10 @@ try:
 
             if last_robot.detect_narrow_passage_backward():
 
-                Robot.clear_line_data(robots)
-
-                leader = Robot.choose_leader(
-                    robots,
-                    target_position
-                )
+                # Mantém o líder da formação em linha como referência fixa.
+                # A transição linha -> triângulo deve ocorrer ao redor dele.
+                # A limpeza da linha e escolha de novo líder só acontece
+                # após a reconstrução completa do triângulo.
 
                 passage_detected_time = None
 
@@ -260,7 +258,7 @@ try:
                     target_position
                 )
 
-
+                
                 state = "MOVE_TRIANGLE"
 
         # REFORMA O TRIÂNGULO NO GOAL

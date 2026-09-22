@@ -23,11 +23,11 @@ K_V = 0.2
 K_W = 3.5 # Para 3 robôs: *6;
 
 # Repulsão entre robôs
-K_REP_ROBOTS = 0
+K_REP_ROBOTS = 0.8
 
 # Formação triangular
 DESIRED_DISTANCE = 0.30   # distância desejada entre cada par de robôs
-DIST_TOL = 0.14         # tolerância da formação. Para 4 robôs: 
+DIST_TOL = 0.05         # tolerância da formação. Para 4 robôs: 
 V_MAX_FORMATION = 0.13*4 *4 # Para 3 robôs: *4;
 
 V_MAX_LEADER_GOAL = 0.8
