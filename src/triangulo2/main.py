@@ -9,7 +9,7 @@ client = RemoteAPIClient()
 sim = client.getObject('sim')
 client.setStepping(True)
 
-created_epucks = Robot.create_epucks(sim, 3) # Vai criar 3 robos, pois o ePuck1 ja esta na cena
+created_epucks = Robot.create_epucks(sim, 5) # Vai criar 3 robos, pois o ePuck1 ja esta na cena
 
 goal_paths = [
     sim.getObject('/Goal1'),
@@ -29,7 +29,7 @@ obstacles = [
 obstacle_cache = Robot.create_obstacle_cache(sim, obstacles)
 
 robots = []
-for i in range(1, 4): # Vai percorrer 4 robos
+for i in range(1, 6): # Vai percorrer 10 robos
     robots.append(Robot(name= 'ePuck'+f"{i}",
                 base=sim.getObject('/ePuck'+f"{i}"+'/base'),
                 goal_paths=goal_paths,
@@ -157,7 +157,7 @@ try:
 
                 passage_detected_time = None
 
-                state = "FORM_TRIANGLE_AFTER_PASSAGE"
+                state = "FORM_TRIANGLE_TRANSITION"
 
                 continue
 
@@ -206,60 +206,107 @@ try:
 
                 if current_goal_index < len(goal_paths)-1:
 
-                    state = "FORM_TRIANGLE_AFTER_GOAL"
+                    state = "FORM_TRIANGLE_TRANSITION"
 
                 else:
 
                     sim.stopSimulation()
                     break
 
+
+        # ============================================
+        # Transição linha -> triângulo
+        # Movimento lateral do seguidor 1
+        # ============================================
+        
+
+        elif state == "FORM_TRIANGLE_TRANSITION":
+
+            for robot in robots:
+
+                if robot is leader:
+
+                    robot.run(
+                        robots,
+                        mode="triangle_transition_leader",
+                        target_position=target_position
+                    )
+
+                elif robot is line_order[1]:
+
+                    robot.run(
+                        robots,
+                        mode="triangle_transition"
+                    )
+
+                else:
+
+                    robot.run(
+                        robots,
+                        mode="move_triangle"
+                    )
+
+
+            transition_ready = Robot.form_triangle_transition(
+                robots,
+                leader
+            )
+
+            if transition_ready:
+
+                # for robot in robots:
+                #     robot.stop_robot()
+
+                # time.sleep(0.2)
+
+                state = "MOVE_TRIANGLE"
         # ============================================
         # Retorno da linha para triângulo após passagem
         # ============================================
 
-        elif state == "FORM_TRIANGLE_AFTER_PASSAGE":
+        # elif state == "FORM_TRIANGLE_AFTER_PASSAGE":
 
             
-            max_errors = []
+        #     max_errors = []
 
 
-            for robot in robots:
+        #     for robot in robots:
 
 
-                robot.run(
-                    robots,
-                    mode="formation_with_goal",
-                    target_position=target_position
-                )
+        #         robot.run(
+        #             robots,
+        #             mode="formation_with_goal",
+        #             target_position=target_position
+        #         )
 
 
-                max_errors.append(robot.max_error)
+        #         max_errors.append(robot.max_error)
 
 
 
-            # Formação triangular concluída
+        #     # Formação triangular concluída
 
-            if max(max_errors) < Parameters.DIST_TOL:
-
-
-                for robot in robots:
-                    robot.stop_robot()
+        #     if max(max_errors) < Parameters.DIST_TOL:
 
 
-                time.sleep(0.5)
+        #         for robot in robots:
+        #             robot.stop_robot()
 
 
-                Robot.clear_line_data(robots)
+        #         time.sleep(0.5)
 
 
-                # Novo líder
-                leader = Robot.choose_leader(
-                    robots,
-                    target_position
-                )
+        #         Robot.clear_line_data(robots)
+
+
+        #         # Novo líder
+        #         leader = Robot.choose_leader(
+        #             robots,
+        #             target_position
+        #         )
 
                 
-                state = "MOVE_TRIANGLE"
+        #         state = "MOVE_TRIANGLE"
 
         # REFORMA O TRIÂNGULO NO GOAL
         elif state == "FORM_TRIANGLE_AFTER_GOAL":

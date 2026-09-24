@@ -24,6 +24,7 @@ class Robot:
         self.leader = None
         self.line_order = None
         self.line_target_position = None
+        self.triangle_transition_target = None
 
         self.max_error = 0
 
@@ -31,6 +32,10 @@ class Robot:
 
         # Controle de movimento reverso
         self.reverse_mode = False
+
+        self.transition_initialized = False
+
+        
 
     def start_line_transition(self):
         self.line_start_time = time.time()
@@ -117,6 +122,34 @@ class Robot:
 
             return False
         
+        elif mode == "triangle_transition_leader":
+
+            self.force = np.array([0.0,0.0])
+
+            self.attraction_force(target_position)
+
+            self.repulsive_force(
+                repulsion_scale=REP_SCALE_LEADER
+            )
+
+            self.set_wheel_speeds(
+                V_MAX_LEADER_TRANSITION
+            )
+
+            return False
+        
+        elif mode == "triangle_transition":
+
+            self.triangle_transition_force(
+                robots
+            )
+
+            self.set_wheel_speeds(
+                V_MAX_FORMATION
+            )
+
+            return False
+        
         elif mode == "go_to_goal":
             if target_position is None:
                 self.stop_robot()
@@ -184,16 +217,19 @@ class Robot:
         angle = self.wrap_to_pi(angle_desired - self.orientation) # Erro entre a direção desejada e orientação atual
 
         # Movimento reverso com histerese
-        if abs(angle) > np.radians(120):
-            self.reverse_mode = True
-        elif abs(angle) < np.radians(70):
-            self.reverse_mode = False
+        # if abs(angle) > np.radians(120):
+        #     self.reverse_mode = True
+        # elif abs(angle) < np.radians(70):
+        #     self.reverse_mode = False
 
-        v = K_V
+        v = K_V * (0.5 + 0.5*np.cos(angle))
 
-        # Se o alvo estiver atrás, utiliza ré ao invés de girar 180 graus
-        if self.reverse_mode:
-            v = -v
+        if v < 0:
+            v = 0
+
+        # # Se o alvo estiver atrás, utiliza ré ao invés de girar 180 graus
+        # if self.reverse_mode:
+        #     v = -v
 
         v = max(min(v, V_MAX), -V_MAX)
 
@@ -303,7 +339,61 @@ class Robot:
 
         self.force = self.force + F_rep_robots
 
+    def triangle_transition_force(self, robots):
 
+        leader = self.line_order[0]
+
+        direction = (
+            self.line_target_position -
+            leader.position
+        )
+
+        direction = direction / np.linalg.norm(direction)
+
+        side = np.array(
+            [-direction[1],
+            direction[0]]
+        )
+
+        offset = DESIRED_DISTANCE * 0.866
+
+        target = (
+            leader.position
+            - direction * DESIRED_DISTANCE
+            + side * offset
+        )
+
+        self.triangle_transition_target = target
+
+        self.force = target - self.position
+
+    @staticmethod
+    def form_triangle_transition(robots, leader):
+
+        # seguidor 1
+        follower1 = leader.line_order[1]
+
+        for robot in robots:
+
+            if robot.line_order is None:
+                continue
+
+
+            if robot.line_order.index(robot) == 1:
+
+                robot.run(
+                    robots,
+                    mode="triangle_transition"
+                )
+
+                error = np.linalg.norm(
+                    robot.triangle_transition_target -
+                    robot.position
+                )
+                return error < 0.03
+
+
+        return False
     
     # função apenas para formação triangulo
     # calcula o vetor resultante de formação triangular
@@ -335,15 +425,7 @@ class Robot:
 
         self.force = force
         self.max_error = max_error
-        print(
-            self.name,
-            "posição:",
-            self.position,
-            "força:",
-            self.force,
-            "erro:",
-            self.max_error
-        )
+
 
     def line_formation_force(self):
         if (
@@ -634,7 +716,7 @@ class Robot:
         created_epucks = []
         epuck_template = sim.getObject('/ePuck1')
 
-        x_min, x_max = 0.5, 1.5  # Limites de X
+        x_min, x_max = 0.5, 2.5  # Limites de X
         y_min, y_max = 1.6, 2.3  # Limites de Y
 
         for i in range(2, n_robots+1):  # Correção para incluir o último robô
