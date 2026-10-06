@@ -33,7 +33,10 @@ class Robot:
         # Controle de movimento reverso
         self.reverse_mode = False
 
-        self.transition_initialized = False
+        # Controle do lado escolhido para contornar obstáculos
+        self.avoidance_side = None
+        self.avoidance_last_active = None
+
 
         
 
@@ -41,136 +44,166 @@ class Robot:
         self.line_start_time = time.time()
 
 
-    def run(self, robots=None, mode="formation", target_position=None): 
-        self.get_pose_2d() # Pose do robô é atualizada a cada iteração
-        
+    def run(
+        self,
+        robots=None,
+        mode="formation",
+        target_position=None,
+        formation_context=None
+    ):
+        self.get_pose_2d()
+
         if mode == "formation":
             self.formation_force(robots)
             self.repulsive_force(repulsion_scale=REP_SCALE_FOLLOWER)
-            self.set_wheel_speeds(V_MAX_FORMATION)
-            #self.repulsive_r2r(robots)
-            return False
-        
-        elif mode == "line_formation":
 
-
-            # posição do robô na fila
-            index = self.line_order.index(self)
-
-
-            # tempo que ele deve esperar
-            wait_time = (
-                index *
-                LINE_FORMATION_DELAY
+            linear_speed = self.calculate_linear_speed(
+                self.max_error,
+                V_MIN_FORMATION,
+                V_MAX_FORMATION,
+                FORM_ERROR_MIN,
+                FORM_ERROR_MAX
             )
 
+            self.set_wheel_speeds(linear_speed)
+            return False
 
-            # ainda não chegou sua vez
+        elif mode == "line_formation":
             if (
-                time.time() -
-                self.line_start_time
-                <
-                wait_time
+                self.line_order is None
+                or self not in self.line_order
+                or self.line_start_time is None
             ):
-
                 self.stop_robot()
-
                 return False
 
+            index = self.line_order.index(self)
+            wait_time = index * LINE_FORMATION_DELAY
 
-
-            # entrou na formação linha
+            if time.time() - self.line_start_time < wait_time:
+                self.stop_robot()
+                return False
 
             self.line_formation_force()
+            self.repulsive_force(repulsion_scale=REP_SCALE_FOLLOWER)
 
-            self.repulsive_force(
-                repulsion_scale=REP_SCALE_FOLLOWER
+            linear_speed = self.calculate_linear_speed(
+                self.max_error,
+                V_MIN_FORMATION,
+                V_MAX_FORMATION,
+                FORM_ERROR_MIN,
+                FORM_ERROR_MAX
             )
 
-            #self.repulsive_r2r(robots)
-
-
-            self.set_wheel_speeds(
-                V_MAX_FORMATION
-            )
-
-
+            self.set_wheel_speeds(linear_speed)
             return False
-        
+
         elif mode == "formation_with_goal":
-            # Durante a transição linha -> triângulo após a passagem estreita,
-            # o líder permanece parado e os seguidores se reposicionam ao redor dele.
-            # A identificação é feita pelo line_order, pois durante esta transição
-            # o líder da linha é a referência fixa da reconstrução.
+            # Mantido por compatibilidade: líder parado e seguidores
+            # recuperando a formação triangular ao redor dele.
             if self.leader is self:
                 self.stop_robot()
                 self.force = np.array([0.0, 0.0])
                 self.max_error = 0.0
                 return False
 
-            # Seguidores recuperam formação triangular
-            else:
+            self.formation_force(robots)
+            self.repulsive_force(repulsion_scale=REP_SCALE_FOLLOWER)
 
-                self.formation_force(robots)
-                #self.repulsive_r2r(robots)
-                self.repulsive_force(
-                    repulsion_scale=REP_SCALE_FOLLOWER
-                )
+            linear_speed = self.calculate_linear_speed(
+                self.max_error,
+                V_MIN_FORMATION,
+                V_MAX_FORMATION,
+                FORM_ERROR_MIN,
+                FORM_ERROR_MAX
+            )
 
-
-            self.set_wheel_speeds(V_MAX_FORMATION)
-
+            self.set_wheel_speeds(linear_speed)
             return False
-        
+
         elif mode == "triangle_transition_leader":
+            if target_position is None:
+                self.stop_robot()
+                self.force = np.array([0.0, 0.0])
+                return False
 
-            self.force = np.array([0.0,0.0])
+            # Se o líder já chegou ao Goal, ele vira a referência fixa
+            # para a reconstrução do triângulo.
+            if self.arrived_target(target_position, stop=True):
+                self.force = np.array([0.0, 0.0])
+                return True
 
+            self.force = np.array([0.0, 0.0])
             self.attraction_force(target_position)
-
-            self.repulsive_force(
-                repulsion_scale=REP_SCALE_LEADER
-            )
-
-            self.set_wheel_speeds(
-                V_MAX_LEADER_TRANSITION
-            )
-
+            repulsive = self.repulsive_force(repulsion_scale=REP_SCALE_LEADER)
+            self.tangential_avoidance_force(target_position,repulsive)
+            self.set_wheel_speeds(V_MAX_LEADER_TRANSITION, allow_reverse=False)
             return False
-        
+
         elif mode == "triangle_transition":
+            self.triangle_transition_force(robots)
 
-            self.triangle_transition_force(
-                robots
+            if self.triangle_transition_target is None:
+                self.stop_robot()
+                return False
+
+            self.repulsive_force(repulsion_scale=REP_SCALE_FOLLOWER)
+
+            transition_error = np.linalg.norm(
+                self.triangle_transition_target - self.position
             )
 
-            self.set_wheel_speeds(
-                V_MAX_FORMATION
+            linear_speed = self.calculate_linear_speed(
+                transition_error,
+                V_MIN_FORMATION,
+                V_MAX_FORMATION,
+                FORM_ERROR_MIN,
+                FORM_ERROR_MAX
             )
 
+            self.set_wheel_speeds(linear_speed)
             return False
-        
+
         elif mode == "go_to_goal":
             if target_position is None:
                 self.stop_robot()
                 return False
-            
-            if self.arrived_target(target_position, stop=False):
-                return True
-            
-            self.force = np.array([0.0,0.0])
-            self.attraction_force(target_position)
-            self.repulsive_force(repulsion_scale=REP_SCALE_LEADER)
-            self.set_wheel_speeds(V_MAX_LEADER_GOAL)
 
+            if self.arrived_target(target_position, stop=True):
+                return True
+
+            self.force = np.array([0.0, 0.0])
+            self.attraction_force(target_position)
+            repulsive = self.repulsive_force(repulsion_scale=REP_SCALE_LEADER)
+            self.tangential_avoidance_force(target_position, repulsive)
+
+            rho = np.linalg.norm(target_position - self.position)
+
+            linear_speed = self.calculate_linear_speed(
+                rho,
+                V_MIN_LEADER,
+                V_MAX_LEADER_GOAL,
+                GOAL_SPEED_DIST_MIN,
+                GOAL_SPEED_DIST_MAX
+            )
+
+            cohesion_scale = self.leader_cohesion_scale(
+                robots,
+                formation_context=formation_context
+            )
+
+            linear_speed *= cohesion_scale
+            self.set_wheel_speeds(linear_speed, allow_reverse = False)
             return False
 
         elif mode == "stop":
             self.stop_robot()
             return False
 
-        self.force = np.array([0.0, 0.0])
-        return False # Ainda não chegou ao goal
+        # Evita que um erro de digitação em mode deixe o robô executando
+        # silenciosamente o último comando de roda.
+        self.stop_robot()
+        raise ValueError(f"Modo de controle desconhecido: {mode}")
 
     @staticmethod
     def wrap_to_pi(angle):
@@ -180,6 +213,143 @@ class Robot:
             angle += 2.0 * np.pi
         return angle
     
+    @staticmethod
+    def calculate_linear_speed(
+        error,
+        v_min,
+        v_max,
+        error_min,
+        error_max
+    ):
+        """
+        Calcula uma velocidade linear proporcional ao erro/distância,
+        limitada entre v_min e v_max.
+        """
+
+        error = abs(float(error))
+
+        # Proteção contra parâmetros inválidos
+        if error_max <= error_min:
+            return v_max
+
+        # Erro pequeno -> velocidade mínima
+        if error <= error_min:
+            return v_min
+
+        # Erro grande -> velocidade máxima
+        if error >= error_max:
+            return v_max
+
+        # Região proporcional
+        alpha = (
+            (error - error_min)
+            / (error_max - error_min)
+        )
+
+        return (
+            v_min
+            + alpha * (v_max - v_min)
+        )
+    
+    def leader_cohesion_scale(self, robots, formation_context="triangle"):
+        """
+        Reduz a velocidade do líder quando os seguidores ficam para trás.
+
+        formation_context deve ser explicitamente "triangle" ou "line".
+        A função não usa line_order para inferir o estado da máquina, pois
+        line_order também é mantida temporariamente durante a transição.
+        """
+        if robots is None or len(robots) <= 1:
+            return 1.0
+
+        if formation_context == "line":
+            if (
+                self.line_order is None
+                or self not in self.line_order
+                or self.line_order.index(self) != 0
+                or len(self.line_order) < 2
+            ):
+                return 1.0
+
+            first_follower = self.line_order[1]
+            distance = np.linalg.norm(first_follower.position - self.position)
+            gap = distance - LINE_DISTANCE
+
+        elif formation_context == "triangle":
+            gaps = []
+
+            for robot in robots:
+                if robot is self:
+                    continue
+
+                distance = np.linalg.norm(robot.position - self.position)
+                gaps.append(distance - DESIRED_DISTANCE)
+
+            if not gaps:
+                return 1.0
+
+            gap = max(gaps)
+
+        else:
+            raise ValueError(
+                "formation_context deve ser 'triangle' ou 'line'."
+            )
+
+        # ============================================================
+        # Define a escala mínima conforme a formação
+        # ============================================================
+
+        if formation_context == "line":
+            # Na linha o líder nunca para completamente.
+            # Ele continua avançando devagar enquanto
+            # os seguidores recuperam a distância.
+            min_scale = LEADER_LINE_MIN_SCALE
+
+        else:
+            # No triângulo ainda permitimos parar caso
+            # a formação abra demais.
+            min_scale = 0.0
+
+
+        # ============================================================
+        # Formação boa
+        # ============================================================
+
+        if gap <= LEADER_GAP_SOFT:
+            return 1.0
+
+
+        # ============================================================
+        # Formação muito aberta
+        # ============================================================
+
+        if gap >= LEADER_GAP_HARD:
+            return min_scale
+
+
+        # ============================================================
+        # Região intermediária
+        # ============================================================
+
+        alpha = (
+            (gap - LEADER_GAP_SOFT)
+            /
+            (LEADER_GAP_HARD - LEADER_GAP_SOFT)
+        )
+
+        scale = (
+            1.0
+            - alpha * (1.0 - min_scale)
+        )
+
+        return float(
+            np.clip(
+                scale,
+                min_scale,
+                1.0
+            )
+        )
+
     def arrived_target(self, target_position, stop=True):
         rho = np.linalg.norm(target_position - self.position)
 
@@ -205,46 +375,114 @@ class Robot:
             obstacles.append(np.array([pos[0], pos[1]]))
         return obstacles
     
-    def set_wheel_speeds(self, V_MAX):
-        force_norm = np.linalg.norm(self.force)
+    def set_wheel_speeds(self, linear_speed, allow_reverse = True):
 
-        # Se a força for muito pequena, considera que chegou no ponto desejado
+        force_norm = np.linalg.norm(
+            self.force
+        )
+
+        # Força praticamente nula
         if force_norm < 0.02:
             self.stop_robot()
             return
 
-        angle_desired = np.atan2(self.force[1], self.force[0]) # Para onde o robô deveria estar apontando
-        angle = self.wrap_to_pi(angle_desired - self.orientation) # Erro entre a direção desejada e orientação atual
+        angle_desired = np.atan2(
+            self.force[1],
+            self.force[0]
+        )
 
+        angle = self.wrap_to_pi(
+            angle_desired
+            - self.orientation
+        )
+
+        # ========================================
         # Movimento reverso com histerese
-        # if abs(angle) > np.radians(120):
-        #     self.reverse_mode = True
-        # elif abs(angle) < np.radians(70):
-        #     self.reverse_mode = False
+        # ========================================
 
-        v = K_V * (0.5 + 0.5*np.cos(angle))
+        if allow_reverse:
 
-        if v < 0:
-            v = 0
+            if abs(angle) > np.radians(120):
+                self.reverse_mode = True
 
-        # # Se o alvo estiver atrás, utiliza ré ao invés de girar 180 graus
-        # if self.reverse_mode:
-        #     v = -v
+            elif abs(angle) < np.radians(70):
+                self.reverse_mode = False
 
-        v = max(min(v, V_MAX), -V_MAX)
+        else:
 
-        w = K_W * angle # velocidade angular depende apenas do erro angular
+            self.reverse_mode = False
 
-        # conversão de (v, w) para velocidades das rodas
-        wr = v/WHEEL_RADIUS + (w*AXLE_LENGTH) / (2.0*WHEEL_RADIUS)
-        wl = v/WHEEL_RADIUS - (w*AXLE_LENGTH) / (2.0*WHEEL_RADIUS)
+        # ========================================
+        # Velocidade linear
+        # ========================================
 
-        # Saturação
-        wr = max(min(wr, W_MAX), -W_MAX)
-        wl = max(min(wl, W_MAX), -W_MAX)
+        v = max(
+            0.0,
+            float(linear_speed)
+        )
 
-        self.sim.setJointTargetVelocity(self.w_left, float(wl))
-        self.sim.setJointTargetVelocity(self.w_right, float(wr))
+        # Quando a ré está desabilitada, reduz a velocidade
+        # de translação se o robô ainda não estiver apontando
+        # para a direção desejada.
+        if not allow_reverse:
+
+            heading_scale = max(
+                0.0,
+                np.cos(angle)
+            )
+
+            v *= heading_scale
+
+        if self.reverse_mode:
+            v = -v
+
+        # ========================================
+        # Velocidade angular
+        # ========================================
+
+        w = K_W * angle
+
+        # ========================================
+        # Cinemática diferencial
+        # ========================================
+
+        wr = (
+            v / WHEEL_RADIUS
+            +
+            (w * AXLE_LENGTH)
+            / (2.0 * WHEEL_RADIUS)
+        )
+
+        wl = (
+            v / WHEEL_RADIUS
+            -
+            (w * AXLE_LENGTH)
+            / (2.0 * WHEEL_RADIUS)
+        )
+
+        # ========================================
+        # Saturação das rodas
+        # ========================================
+
+        wr = max(
+            min(wr, WHEEL_OMEGA_MAX),
+            -WHEEL_OMEGA_MAX
+        )
+
+        wl = max(
+            min(wl, WHEEL_OMEGA_MAX),
+            -WHEEL_OMEGA_MAX
+        )
+
+        self.sim.setJointTargetVelocity(
+            self.w_left,
+            float(wl)
+        )
+
+        self.sim.setJointTargetVelocity(
+            self.w_right,
+            float(wr)
+        )
 
     def stop_robot(self):
         self.sim.setJointTargetVelocity(self.w_left, 0.0)
@@ -316,85 +554,299 @@ class Robot:
 
         self.force = self.force + F_rep_scaled
 
+        return F_rep_scaled
+    
+    def tangential_avoidance_force(
+        self,
+        target_position,
+        repulsive_force
+    ):
+        """
+        Adiciona uma componente tangencial à força repulsiva.
 
-    def repulsive_r2r (self, robots):
-        REP_RANGE = 3 * ROBOT_RADIUS
+        Isso evita mínimos locais do campo potencial quando
+        atração e repulsão ficam aproximadamente opostas.
+
+        O robô escolhe passar por um dos lados do obstáculo
+        e mantém essa decisão temporariamente para evitar
+        oscilações esquerda/direita.
+        """
+
+        rep_norm = np.linalg.norm(repulsive_force)
+
+        # ========================================================
+        # Não existe obstáculo suficientemente próximo
+        # ========================================================
+
+        if rep_norm < TANGENTIAL_REP_MIN:
+
+            if self.avoidance_last_active is not None:
+
+                if (
+                    time.time()
+                    - self.avoidance_last_active
+                    > AVOIDANCE_MEMORY_TIME
+                ):
+                    self.avoidance_side = None
+                    self.avoidance_last_active = None
+
+            return
+
+        # Obstáculo está sendo evitado neste instante
+        self.avoidance_last_active = time.time()
+
+        # ========================================================
+        # Direção radial de repulsão
+        # ========================================================
+
+        radial = (
+            repulsive_force
+            / rep_norm
+        )
+
+        # Vetores tangenciais possíveis
+        tangent_left = np.array([
+            -radial[1],
+            radial[0]
+        ])
+
+        tangent_right = -tangent_left
+
+        # ========================================================
+        # Escolha do lado
+        # ========================================================
+
+        if self.avoidance_side is None:
+
+            target_vector = (
+                target_position
+                - self.position
+            )
+
+            target_norm = np.linalg.norm(
+                target_vector
+            )
+
+            if target_norm > 1e-6:
+
+                target_direction = (
+                    target_vector
+                    / target_norm
+                )
+
+            else:
+
+                target_direction = np.zeros(2)
+
+            # Direção para a qual o robô já está apontando
+            heading = np.array([
+                np.cos(self.orientation),
+                np.sin(self.orientation)
+            ])
+
+            # Avalia os dois lados.
+            #
+            # Queremos:
+            # 1 - continuar aproximadamente na direção do Goal
+            # 2 - evitar uma mudança brusca em relação à orientação atual
+
+            score_left = (
+                np.dot(
+                    tangent_left,
+                    target_direction
+                )
+                +
+                AVOIDANCE_HEADING_WEIGHT
+                * np.dot(
+                    tangent_left,
+                    heading
+                )
+            )
+
+            score_right = (
+                np.dot(
+                    tangent_right,
+                    target_direction
+                )
+                +
+                AVOIDANCE_HEADING_WEIGHT
+                * np.dot(
+                    tangent_right,
+                    heading
+                )
+            )
+
+            if score_left >= score_right:
+                self.avoidance_side = 1.0
+
+            else:
+                self.avoidance_side = -1.0
+
+        # ========================================================
+        # Usa o lado já escolhido
+        # ========================================================
+
+        tangent = (
+            self.avoidance_side
+            * tangent_left
+        )
+
+        # Força tangencial proporcional à repulsão
+        tangential_magnitude = (
+            K_TANGENTIAL
+            * rep_norm
+        )
+
+        # Saturação
+        tangential_magnitude = min(
+            tangential_magnitude,
+            F_TANGENTIAL_MAX
+        )
+
+        F_tangential = (
+            tangential_magnitude
+            * tangent
+        )
+
+        self.force = (
+            self.force
+            + F_tangential
+        )
+
+
+    def repulsive_r2r(self, robots):
+        rep_range = 3 * ROBOT_RADIUS
         F_rep_robots = np.zeros_like(self.force)
 
         for robot in robots:
             if robot is self:
                 continue
 
-            dir = self.position - robot.position
-            norm_dir = np.linalg.norm(dir)
+            direction_vec = self.position - robot.position
+            norm_dir = np.linalg.norm(direction_vec)
+
+            if norm_dir < 1e-6:
+                continue
 
             dist = norm_dir - 2 * ROBOT_RADIUS
+            dist = max(dist, 0.01)
 
-            if dist < REP_RANGE:
-                F_rep_robots = F_rep_robots + (
-                    (K_REP_ROBOTS / (dist ** 2)) *
-                    ((1 / dist) - (1 / REP_RANGE)) *
-                    (dir / norm_dir)
+            if dist < rep_range:
+                F_rep_robots += (
+                    (K_REP_ROBOTS / (dist ** 2))
+                    * ((1.0 / dist) - (1.0 / rep_range))
+                    * (direction_vec / norm_dir)
                 )
 
         self.force = self.force + F_rep_robots
 
     def triangle_transition_force(self, robots):
+        """
+        Define o alvo dos dois seguidores durante a transição linha -> triângulo.
+
+        Para um triângulo equilátero de lado D com o líder no vértice frontal:
+            deslocamento longitudinal = sqrt(3)/2 * D
+            deslocamento lateral     = 1/2 * D
+        """
+        if (
+            self.line_order is None
+            or self.line_target_position is None
+            or self not in self.line_order
+            or len(self.line_order) < 3
+        ):
+            self.triangle_transition_target = None
+            self.force = np.array([0.0, 0.0])
+            return
 
         leader = self.line_order[0]
+        index = self.line_order.index(self)
 
-        direction = (
-            self.line_target_position -
-            leader.position
-        )
+        # Apenas os dois seguidores do triângulo recebem alvos explícitos.
+        if index not in (1, 2):
+            self.triangle_transition_target = None
+            self.force = np.array([0.0, 0.0])
+            return
 
-        direction = direction / np.linalg.norm(direction)
+        direction = self.line_target_position - leader.position
+        direction_norm = np.linalg.norm(direction)
 
-        side = np.array(
-            [-direction[1],
-            direction[0]]
-        )
+        # Se o líder estiver exatamente sobre o Goal, usa sua orientação
+        # para manter definida a orientação geométrica do triângulo.
+        if direction_norm < 1e-6:
+            direction = np.array([
+                np.cos(leader.orientation),
+                np.sin(leader.orientation)
+            ])
+        else:
+            direction = direction / direction_norm
 
-        offset = DESIRED_DISTANCE * 0.866
+        side = np.array([-direction[1], direction[0]])
+
+        longitudinal_offset = (np.sqrt(3.0) / 2.0) * DESIRED_DISTANCE
+        lateral_offset = 0.5 * DESIRED_DISTANCE
+
+        side_sign = 1.0 if index == 1 else -1.0
 
         target = (
             leader.position
-            - direction * DESIRED_DISTANCE
-            + side * offset
+            - direction * longitudinal_offset
+            + side_sign * side * lateral_offset
         )
 
         self.triangle_transition_target = target
-
         self.force = target - self.position
+        self.max_error = np.linalg.norm(self.force)
+
+    @staticmethod
+    def triangle_max_error(robots):
+        """Maior erro absoluto entre qualquer par e DESIRED_DISTANCE."""
+        max_error = 0.0
+
+        for i in range(len(robots)):
+            for j in range(i + 1, len(robots)):
+                distance = np.linalg.norm(
+                    robots[j].position - robots[i].position
+                )
+                max_error = max(
+                    max_error,
+                    abs(distance - DESIRED_DISTANCE)
+                )
+
+        return max_error
 
     @staticmethod
     def form_triangle_transition(robots, leader):
+        """
+        Apenas VERIFICA a transição; não envia comandos novamente.
+        """
+        if (
+            leader is None
+            or leader.line_order is None
+            or len(leader.line_order) < 3
+        ):
+            return False
 
-        # seguidor 1
-        follower1 = leader.line_order[1]
+        followers = leader.line_order[1:3]
 
-        for robot in robots:
+        if any(robot.triangle_transition_target is None for robot in followers):
+            return False
 
-            if robot.line_order is None:
-                continue
+        target_error = max(
+            np.linalg.norm(
+                robot.triangle_transition_target - robot.position
+            )
+            for robot in followers
+        )
 
+        triangle_error = Robot.triangle_max_error(
+            [leader, followers[0], followers[1]]
+        )
 
-            if robot.line_order.index(robot) == 1:
+        return (
+            target_error < TRIANGLE_TRANSITION_TOL
+            and triangle_error < DIST_TOL
+        )
 
-                robot.run(
-                    robots,
-                    mode="triangle_transition"
-                )
-
-                error = np.linalg.norm(
-                    robot.triangle_transition_target -
-                    robot.position
-                )
-                return error < 0.03
-
-
-        return False
-    
     # função apenas para formação triangulo
     # calcula o vetor resultante de formação triangular
     def formation_force(self, robots):
@@ -416,6 +868,10 @@ class Robot:
 
             # Guarda o maior erro absoluto, para usar no critério de parada
             max_error = max(max_error, abs(dist_error))
+
+            # Evita divisão por zero caso dois centros coincidam numericamente.
+            if dist < 1e-6:
+                continue
 
             # Vetor unitário na direção do outro robô
             direction = delta / dist
@@ -679,14 +1135,29 @@ class Robot:
     
     @staticmethod
     def form_triangle(robots):
-        max_errors = []
-
         for robot in robots:
             robot.run(robots, mode="formation")
-            max_errors.append(robot.max_error)
 
-        return max(max_errors) < DIST_TOL
-    
+        return Robot.triangle_max_error(robots) < DIST_TOL
+
+    @staticmethod
+    def form_triangle_around_leader(robots, leader):
+        """
+        Reagrupa o triângulo mantendo o líder parado no Goal.
+        """
+        if leader is None:
+            return False
+
+        leader.stop_robot()
+        leader.force = np.array([0.0, 0.0])
+
+        for robot in robots:
+            if robot is leader:
+                continue
+            robot.run(robots, mode="formation")
+
+        return Robot.triangle_max_error(robots) < DIST_TOL
+
     @staticmethod
     def form_line(robots, leader):
         max_errors = []
@@ -709,6 +1180,8 @@ class Robot:
             robot.leader = None
             robot.line_order = None
             robot.line_target_position = None
+            robot.line_start_time = None
+            robot.triangle_transition_target = None
 
 
     @staticmethod
@@ -716,8 +1189,8 @@ class Robot:
         created_epucks = []
         epuck_template = sim.getObject('/ePuck1')
 
-        x_min, x_max = 0.5, 2.5  # Limites de X
-        y_min, y_max = 1.6, 2.3  # Limites de Y
+        x_min, x_max = 2.0, 4.75  # Limites de X
+        y_min, y_max = 3.0, 4.75  # Limites de Y
 
         for i in range(2, n_robots+1):  # Correção para incluir o último robô
             copied = sim.copyPasteObjects([epuck_template], 1)
