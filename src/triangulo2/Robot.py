@@ -1,6 +1,5 @@
 import numpy as np
 import random
-import time
 from Parameters import *
 
 class Robot:
@@ -41,7 +40,7 @@ class Robot:
         
 
     def start_line_transition(self):
-        self.line_start_time = time.time()
+        self.line_start_time = self.sim.getSimulationTime()
 
 
     def run(
@@ -80,7 +79,7 @@ class Robot:
             index = self.line_order.index(self)
             wait_time = index * LINE_FORMATION_DELAY
 
-            if time.time() - self.line_start_time < wait_time:
+            if self.sim.getSimulationTime() - self.line_start_time < wait_time:
                 self.stop_robot()
                 return False
 
@@ -489,7 +488,20 @@ class Robot:
         self.sim.setJointTargetVelocity(self.w_right, 0.0)
 
     def attraction_force(self, target_position):
-        self.force = self.force + (target_position - self.position) * K_ATT
+        """Atração linear perto do Goal e limitada para distâncias maiores.
+
+        Evita que a atração cresça indefinidamente quando os Goals são
+        afastados ao ampliar a cena, preservando a direção do objetivo.
+        """
+        delta = target_position - self.position
+        distance = np.linalg.norm(delta)
+
+        if distance < 1e-9:
+            return
+
+        direction = delta / distance
+        magnitude = min(K_ATT * distance, F_ATT_MAX)
+        self.force = self.force + magnitude * direction
 
     def repulsive_force(self, repulsion_scale=1.0):
         F_rep = np.zeros_like(self.force)
@@ -583,7 +595,7 @@ class Robot:
             if self.avoidance_last_active is not None:
 
                 if (
-                    time.time()
+                    self.sim.getSimulationTime()
                     - self.avoidance_last_active
                     > AVOIDANCE_MEMORY_TIME
                 ):
@@ -593,7 +605,7 @@ class Robot:
             return
 
         # Obstáculo está sendo evitado neste instante
-        self.avoidance_last_active = time.time()
+        self.avoidance_last_active = self.sim.getSimulationTime()
 
         # ========================================================
         # Direção radial de repulsão

@@ -1,4 +1,5 @@
 import time
+import random
 
 from coppeliasim_zmqremoteapi_client import RemoteAPIClient
 
@@ -6,11 +7,16 @@ from Robot import Robot
 import Parameters
 
 
-NUM_ROBOTS = 3
+NUM_ROBOTS = 5
 
 client = RemoteAPIClient()
 sim = client.getObject('sim')
 client.setStepping(True)
+
+# Para reproduzir exatamente os sorteios de posicao dos ePucks copiados,
+# defina RANDOM_SEED (inteiro) em Parameters.py. None mantem o original.
+if Parameters.RANDOM_SEED is not None:
+    random.seed(Parameters.RANDOM_SEED)
 
 # ePuck1 já existe na cena; os demais são copiados a partir dele.
 created_epucks = Robot.create_epucks(sim, NUM_ROBOTS)
@@ -100,7 +106,7 @@ try:
                     target_position
                 )
 
-                line_start_time = time.time()
+                line_start_time = sim.getSimulationTime()
                 for robot in robots:
                     robot.line_start_time = line_start_time
 

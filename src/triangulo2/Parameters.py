@@ -18,6 +18,14 @@ GOAL_TOL = 0.20
 # ============================================================
 # Campo potencial
 # ============================================================
+# A atração cresce linearmente somente perto do Goal.
+# Para distâncias maiores que F_ATT_MAX / K_ATT, sua magnitude
+# fica limitada, evitando que o tamanho da cena domine o desvio.
+K_ATT = 1.0
+F_ATT_MAX = 1.0
+K_REP = 0.5
+REP_RANGE = 0.08
+
 # ============================================================
 # Contorno de obstáculos
 # ============================================================
@@ -39,10 +47,6 @@ AVOIDANCE_MEMORY_TIME = 0.8
 # Peso da orientação atual na escolha esquerda/direita
 AVOIDANCE_HEADING_WEIGHT = 0.35
 
-K_ATT = 1.0
-K_REP = 0.5
-REP_RANGE = 0.08
-
 # Controle angular
 K_W = 1.5
 
@@ -53,7 +57,7 @@ K_REP_ROBOTS = 0.8
 # Formação triangular
 # ============================================================
 DESIRED_DISTANCE = 0.30
-DIST_TOL = 0.05
+DIST_TOL = 0.14
 
 # Velocidade variável dos seguidores
 V_MIN_FORMATION = 0.05
@@ -92,7 +96,7 @@ LEADER_LINE_MIN_SCALE = 0.35
 LINE_DISTANCE = 0.10
 LINE_TOL = 0.05
 K_LINE = 1.5
-LINE_FORMATION_DELAY = 0.05
+LINE_FORMATION_DELAY = 0.9
 
 # ============================================================
 # Transição linha -> triângulo
@@ -103,8 +107,8 @@ TRIANGLE_TRANSITION_TOL = 0.03
 # ============================================================
 # Detecção de passagem estreita
 # ============================================================
-LEADER_VISION_RADIUS = 0.5
-MIN_PASSAGE_WIDTH = 0.6
+LEADER_VISION_RADIUS = 0.6
+MIN_PASSAGE_WIDTH = 0.7
 LEADER_FOV_ANGLE = math.radians(120)
 
 # ============================================================
@@ -115,3 +119,11 @@ REP_SCALE_FOLLOWER = 0.05
 
 F_REP_MAX_FOLLOWER = 0.25
 F_REP_MAX_LEADER = 4.0
+
+# ============================================================
+# Reprodutibilidade das posições iniciais
+# ============================================================
+# None: mantém as posições iniciais aleatórias como antes.
+# Um inteiro (por exemplo, 42): repete as mesmas posições sorteadas
+# para ePuck2 e ePuck3 em cada execução, útil ao comparar cenas.
+RANDOM_SEED = None
